@@ -1,653 +1,523 @@
-import Link from "next/link"
+'use client'
+
+import React, { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Progress } from "@/components/ui/progress"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import {
-  Activity,
-  AlertCircle,
-  ArrowRight,
-  Database,
-  Globe,
-  MessageSquare,
-  Plus,
-  RefreshCw,
-  Server,
-  Settings,
+import { SystemDashboard } from "@/components/system-dashboard"
+import { 
+  Activity, 
+  Bot, 
+  Brain,
+  Cloud, 
+  Database, 
+  Globe, 
+  Mail, 
+  Monitor, 
+  Plus, 
+  RefreshCw, 
+  Server, 
+  Settings, 
+  Shield, 
+  Users, 
   Zap,
+  Workflow,
+  RotateCcw,
+  Target,
+  TrendingUp,
+  ArrowRight,
+  CheckCircle,
+  AlertTriangle,
+  XCircle
 } from "lucide-react"
-import { DashboardHeader } from "@/components/dashboard-header"
-import { DashboardShell } from "@/components/dashboard-shell"
-import { ServiceCard } from "@/components/service-card"
-import { ServiceUsageChart } from "@/components/service-usage-chart"
-import { RecentAutomations } from "@/components/recent-automations"
-import React, { useEffect, useState } from "react" // Import React hooks
 
-// Import necessary classes and types
-import { InMemoryServiceRegistry } from "@/lib/service-registry"
-import { LocalCredentialManager } from "@/lib/credential-manager"
-import { FreeEmailService, type FreeEmailServiceConfig } from "@/lib/service-integrations/free-email-service"
-import { FreeFileStorageService, type FreeFileStorageServiceConfig } from "@/lib/service-integrations/free-file-storage-service"
-import { ServiceLimitMonitorAutomation, type ServiceLimitMonitorConfig } from "@/lib/automation/service-limit-monitor"
-import { CredentialRotatorAutomation, type CredentialRotatorConfig } from "@/lib/automation/credential-rotator"
-import { TriggerType } from "@/lib/automation"
-import { InMemoryAutomationRegistry } from "@/lib/automation-registry"
-import type { ServiceIntegration } from "@/lib/service-integrations"
-import type { Automation } from "@/lib/automation"
-import { ServiceCategory } from "@/lib/service-integrations" // Import ServiceCategory
-import { FreebeeZOrchestrator, type OrchestrationTask } from "@/lib/orchestrator"
+interface ServiceStatus {
+  id: string
+  name: string
+  category: string
+  status: 'connected' | 'disconnected' | 'error' | 'pending'
+  lastUsed: string
+  usage: {
+    current: number
+    limit: number
+    percentage: number
+  }
+}
+
+interface QuickAction {
+  id: string
+  title: string
+  description: string
+  icon: React.ComponentType<any>
+  action: () => void
+  disabled?: boolean
+}
 
 export default function DashboardPage() {
-  // State for managing services and automations
-  const [serviceRegistry] = useState<InMemoryServiceRegistry>(() => new InMemoryServiceRegistry());
-  const [automationRegistry] = useState<InMemoryAutomationRegistry>(() => new InMemoryAutomationRegistry());
-  const [credentialManager] = useState<LocalCredentialManager>(() => new LocalCredentialManager());
-  const [orchestrator] = useState<FreebeeZOrchestrator>(() => new FreebeeZOrchestrator());
-  const [services, setServices] = useState<ServiceIntegration[]>([]);
-  const [automations, setAutomations] = useState<Automation[]>([]);
-  const [orchestrationTasks, setOrchestrationTasks] = useState<OrchestrationTask[]>([]);
-  const [isInitialized, setIsInitialized] = useState(false);
+  const [services, setServices] = useState<ServiceStatus[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState('overview')
 
   useEffect(() => {
-    const initializeApp = async () => {
-      try {
-        // Initialize the orchestrator first
-        await orchestrator.initialize({
-          // Add your API keys here if available
-          // twoCaptchaKey: process.env.NEXT_PUBLIC_2CAPTCHA_KEY,
-          // antiCaptchaKey: process.env.NEXT_PUBLIC_ANTICAPTCHA_KEY,
-        });
-
-        // --- Service Setup ---
-        const emailServiceConfig: FreeEmailServiceConfig = {
-          id: "free-email-1",
-          name: "Free Email Service",
-          description: "A basic free email service provider.",
-          category: ServiceCategory.COMMUNICATION,
-          credentials: { apiKey: "dummy-email-api-key" },
-          limits: { monthlyRequests: 10000 },
-          usage: { monthlyRequestsUsed: 5000 },
-          isActive: true,
-          settings: {},
-        };
-        const storageServiceConfig: FreeFileStorageServiceConfig = {
-          id: "free-storage-1",
-          name: "Free File Storage",
-          description: "A basic free file storage service.",
-          category: ServiceCategory.COMPUTING_STORAGE,
-          credentials: { accessKeyId: "dummy-storage-key", secretAccessKey: "dummy-storage-secret" },
-          limits: { storageLimit: 5 * 1024 * 1024 * 1024 }, // 5GB
-          usage: { storageUsed: 2 * 1024 * 1024 * 1024 }, // 2GB
-          isActive: true,
-          settings: {},
-        };
-
-        const emailService = new FreeEmailService(emailServiceConfig);
-        const storageService = new FreeFileStorageService(storageServiceConfig);
-
-        await serviceRegistry.registerService(emailService);
-        await serviceRegistry.registerService(storageService);
-        setServices([emailService, storageService]);
-
-        // --- Automation Setup ---
-        const limitMonitorConfig: ServiceLimitMonitorConfig = {
-          id: "limit-monitor-1",
-          name: "Monthly Limit Monitor",
-          description: "Monitors monthly request limits for key services.",
-          type: "limit_monitor",
-          servicesToMonitor: ["free-email-1", "free-storage-1"],
-          monitorThresholdPercent: 85,
-          trigger: { type: TriggerType.SCHEDULE, schedule: { type: "hourly" } },
-          actions: [], // Placeholder for actions like sending notifications
-          isActive: true,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        };
-
-        const credentialRotatorConfig: CredentialRotatorConfig = {
-          id: "credential-rotator-1",
-          name: "Daily Credential Rotation",
-          description: "Rotates credentials for critical services daily.",
-          type: "credential_rotator",
-          servicesToRotate: ["free-email-1", "free-storage-1"],
-          trigger: { type: TriggerType.SCHEDULE, schedule: { type: "daily" } },
-          actions: [], // Placeholder for actions like logging rotation
-          isActive: true,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        };
-
-        // Pass the actual service instances to the automations
-        const limitMonitorAutomation = new ServiceLimitMonitorAutomation(limitMonitorConfig, [emailService, storageService], serviceRegistry, credentialManager);
-        const credentialRotatorAutomation = new CredentialRotatorAutomation(credentialRotatorConfig, [emailService, storageService], serviceRegistry, credentialManager);
-
-        await automationRegistry.registerAutomation(limitMonitorAutomation);
-        await automationRegistry.registerAutomation(credentialRotatorAutomation);
-        setAutomations([limitMonitorAutomation, credentialRotatorAutomation]);
-
-        // Get orchestration tasks
-        setOrchestrationTasks(orchestrator.getAllTasks());
-        setIsInitialized(true);
-
-      } catch (error) {
-        console.error('Failed to initialize FreebeeZ:', error);
+    // Mock data - replace with actual API calls
+    const mockServices: ServiceStatus[] = [
+      {
+        id: 'openai',
+        name: 'OpenAI GPT-4',
+        category: 'AI',
+        status: 'connected',
+        lastUsed: '2 hours ago',
+        usage: { current: 800, limit: 1000, percentage: 80 }
+      },
+      {
+        id: 'anthropic',
+        name: 'Anthropic Claude',
+        category: 'AI',
+        status: 'connected',
+        lastUsed: '1 hour ago',
+        usage: { current: 450, limit: 500, percentage: 90 }
+      },
+      {
+        id: 'browserbase',
+        name: 'Browserbase',
+        category: 'Automation',
+        status: 'connected',
+        lastUsed: '30 minutes ago',
+        usage: { current: 120, limit: 200, percentage: 60 }
+      },
+      {
+        id: 'protonmail',
+        name: 'ProtonMail',
+        category: 'Email',
+        status: 'connected',
+        lastUsed: '5 hours ago',
+        usage: { current: 50, limit: 500, percentage: 10 }
+      },
+      {
+        id: 'netlify',
+        name: 'Netlify',
+        category: 'Hosting',
+        status: 'connected',
+        lastUsed: '1 day ago',
+        usage: { current: 5, limit: 100, percentage: 5 }
+      },
+      {
+        id: 'supabase',
+        name: 'Supabase',
+        category: 'Database',
+        status: 'error',
+        lastUsed: '3 days ago',
+        usage: { current: 0, limit: 500, percentage: 0 }
       }
-    };
+    ]
 
-    initializeApp();
-  }, []); // Empty dependency array ensures this runs only once on mount
+    setServices(mockServices)
+    setIsLoading(false)
+  }, [])
 
-  // Function to create auto-registration task
-  const handleAutoRegister = async () => {
-    try {
-      const availableServices = await orchestrator.discoverServices();
-      const serviceIds = availableServices.slice(0, 3).map(s => s.id); // Take first 3 services
-      
-      const task = await orchestrator.createAutoRegistrationTask(serviceIds, {
-        maxConcurrent: 2,
-        retryAttempts: 3,
-        delayBetweenTasks: 5000
-      });
-      
-      setOrchestrationTasks(orchestrator.getAllTasks());
-      console.log('Auto-registration task created:', task.id);
-    } catch (error) {
-      console.error('Failed to create auto-registration task:', error);
+  const quickActions: QuickAction[] = [
+    {
+      id: 'auto-register',
+      title: 'Auto-Register Services',
+      description: 'Automatically register for new services using AI',
+      icon: Bot,
+      action: () => console.log('Auto-register services')
+    },
+    {
+      id: 'optimize-quotas',
+      title: 'Optimize AI Quotas',
+      description: 'Analyze and optimize AI service usage',
+      icon: Brain,
+      action: () => console.log('Optimize quotas')
+    },
+    {
+      id: 'rotate-profiles',
+      title: 'Rotate Profiles',
+      description: 'Switch to fresh user profiles',
+      icon: RotateCcw,
+      action: () => console.log('Rotate profiles')
+    },
+    {
+      id: 'update-proxies',
+      title: 'Update Proxy Pool',
+      description: 'Refresh and validate proxy connections',
+      icon: Globe,
+      action: () => console.log('Update proxies')
+    },
+    {
+      id: 'run-workflow',
+      title: 'Run Stagehand Workflow',
+      description: 'Execute automated service workflows',
+      icon: Workflow,
+      action: () => console.log('Run workflow')
+    },
+    {
+      id: 'analyze-dependencies',
+      title: 'Analyze Dependencies',
+      description: 'Map service interdependencies',
+      icon: Target,
+      action: () => console.log('Analyze dependencies')
     }
-  };
+  ]
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'connected':
+        return <CheckCircle className="h-4 w-4 text-green-600" />
+      case 'error':
+        return <XCircle className="h-4 w-4 text-red-600" />
+      case 'pending':
+        return <RefreshCw className="h-4 w-4 text-yellow-600 animate-spin" />
+      default:
+        return <AlertTriangle className="h-4 w-4 text-gray-400" />
+    }
+  }
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'connected':
+        return 'bg-green-100 text-green-800'
+      case 'error':
+        return 'bg-red-100 text-red-800'
+      case 'pending':
+        return 'bg-yellow-100 text-yellow-800'
+      default:
+        return 'bg-gray-100 text-gray-800'
+    }
+  }
+
+  const getUsageColor = (percentage: number) => {
+    if (percentage >= 90) return 'bg-red-500'
+    if (percentage >= 75) return 'bg-yellow-500'
+    return 'bg-green-500'
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <RefreshCw className="h-8 w-8 animate-spin" />
+        <span className="ml-2">Loading dashboard...</span>
+      </div>
+    )
+  }
 
   return (
     <div className="flex min-h-screen flex-col">
-      <DashboardHeader />
-      <DashboardShell>
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm">
-              <RefreshCw className="mr-2 h-4 w-4" />
-              Refresh
-            </Button>
-            <Button size="sm" onClick={handleAutoRegister} disabled={!isInitialized}>
-              <Zap className="mr-2 h-4 w-4" />
-              Auto-Register Services
-            </Button>
-            <Link href="/services/add">
-              <Button size="sm" variant="outline">
-                <Plus className="mr-2 h-4 w-4" />
-                Add Service
-              </Button>
+      <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="container flex h-14 items-center">
+          <Link href="/" className="flex items-center gap-2 font-semibold">
+            <Zap className="h-5 w-5" />
+            <span>FreebeeZ</span>
+          </Link>
+          <nav className="ml-auto flex gap-4 sm:gap-6">
+            <Link href="/dashboard" className="text-sm font-medium hover:underline underline-offset-4">
+              Dashboard
             </Link>
-          </div>
+            <Link href="/services" className="text-sm font-medium hover:underline underline-offset-4">
+              Services
+            </Link>
+            <Link href="/automations" className="text-sm font-medium hover:underline underline-offset-4">
+              Automations
+            </Link>
+            <Link href="/settings" className="text-sm font-medium hover:underline underline-offset-4">
+              Settings
+            </Link>
+          </nav>
         </div>
-        <Tabs defaultValue="overview" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="services">Services</TabsTrigger>
-            <TabsTrigger value="automations">Automations</TabsTrigger>
-            <TabsTrigger value="orchestration">Orchestration</TabsTrigger>
-            <TabsTrigger value="usage">Usage</TabsTrigger>
-          </TabsList>
-          <TabsContent value="overview" className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Total Services</CardTitle>
-                  <Settings className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{services.length}</div> {/* Dynamically show count */}
-                  <p className="text-xs text-muted-foreground">+2 from last month</p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Active Automations</CardTitle>
-                  <Zap className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{automations.filter(a => a.isRunning()).length}</div> {/* Dynamically show count */}
-                  <p className="text-xs text-muted-foreground">+3 from last month</p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Service Health</CardTitle>
-                  <Activity className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">98%</div>
-                  <p className="text-xs text-muted-foreground">1 service with issues</p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Saved Credentials</CardTitle>
-                  <Database className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">24</div>
-                  <p className="text-xs text-muted-foreground">Across 12 services</p>
-                </CardContent>
-              </Card>
-            </div>
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-              <Card className="col-span-4">
-                <CardHeader>
-                  <CardTitle>Service Usage</CardTitle>
-                </CardHeader>
-                <CardContent className="pl-2">
-                  <ServiceUsageChart />
-                </CardContent>
-              </Card>
-              <Card className="col-span-3">
-                <CardHeader>
-                  <CardTitle>Recent Automations</CardTitle>
-                  <CardDescription>Your recent service automations and their status</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <RecentAutomations />
-                </CardContent>
-              </Card>
-            </div>
+      </header>
+
+      <main className="flex-1 container py-6">
+        <div className="space-y-6">
+          {/* Header */}
+          <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-xl font-bold tracking-tight mb-4">Service Categories</h2>
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                <Link href="/services/communication" className="block">
-                  <Card className="h-full transition-all hover:shadow-md">
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2">
-                        <MessageSquare className="h-5 w-5" />
-                        Communication
-                      </CardTitle>
-                      <CardDescription>VOIP, SIP, and messaging services</CardDescription>
-                    </CardHeader>
-                    <CardContent className="flex justify-between items-center">
-                      <div className="text-2xl font-bold">3</div>
-                      <Button variant="ghost" size="sm">
-                        View <ArrowRight className="ml-2 h-4 w-4" />
-                      </Button>
-                    </CardContent>
-                  </Card>
-                </Link>
-                <Link href="/services/web" className="block">
-                  <Card className="h-full transition-all hover:shadow-md">
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2">
-                        <Globe className="h-5 w-5" />
-                        Web Infrastructure
-                      </CardTitle>
-                      <CardDescription>Domains, hosting, and deployment</CardDescription>
-                    </CardHeader>
-                    <CardContent className="flex justify-between items-center">
-                      <div className="text-2xl font-bold">4</div>
-                      <Button variant="ghost" size="sm">
-                        View <ArrowRight className="ml-2 h-4 w-4" />
-                      </Button>
-                    </CardContent>
-                  </Card>
-                </Link>
-                <Link href="/services/compute" className="block">
-                  <Card className="h-full transition-all hover:shadow-md">
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2">
-                        <Server className="h-5 w-5" />
-                        Computing & Storage
-                      </CardTitle>
-                      <CardDescription>Compute, databases, and storage</CardDescription>
-                    </CardHeader>
-                    <CardContent className="flex justify-between items-center">
-                      <div className="text-2xl font-bold">2</div>
-                      <Button variant="ghost" size="sm">
-                        View <ArrowRight className="ml-2 h-4 w-4" />
-                      </Button>
-                    </CardContent>
-                  </Card>
-                </Link>
-              </div>
+              <h1 className="text-3xl font-bold">Dashboard</h1>
+              <p className="text-muted-foreground">
+                Manage your free services and automation workflows
+              </p>
             </div>
-            <div>
-              <h2 className="text-xl font-bold tracking-tight mb-4">Service Alerts</h2>
+            <Button>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Service
+            </Button>
+          </div>
+
+          {/* Quick Stats */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Connected Services</CardTitle>
+                <Server className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {services.filter(s => s.status === 'connected').length}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {services.length} total services
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">AI Services</CardTitle>
+                <Brain className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {services.filter(s => s.category === 'AI').length}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Active AI integrations
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Automation Tasks</CardTitle>
+                <Activity className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">12</div>
+                <p className="text-xs text-muted-foreground">
+                  5 running, 7 completed
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Success Rate</CardTitle>
+                <TrendingUp className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">94.2%</div>
+                <p className="text-xs text-muted-foreground">
+                  Last 30 days
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Main Content */}
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+            <TabsList>
+              <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="services">Services</TabsTrigger>
+              <TabsTrigger value="system">System Health</TabsTrigger>
+              <TabsTrigger value="automations">Automations</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="overview" className="space-y-4">
+              {/* Quick Actions */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-amber-500">
-                    <AlertCircle className="h-5 w-5" />
-                    Service Limit Warnings
-                  </CardTitle>
+                  <CardTitle>Quick Actions</CardTitle>
+                  <CardDescription>
+                    Common tasks and automation workflows
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {quickActions.map((action) => {
+                      const IconComponent = action.icon
+                      return (
+                        <Button
+                          key={action.id}
+                          variant="outline"
+                          className="h-auto p-4 flex flex-col items-start space-y-2"
+                          onClick={action.action}
+                          disabled={action.disabled}
+                        >
+                          <div className="flex items-center space-x-2">
+                            <IconComponent className="h-5 w-5" />
+                            <span className="font-medium">{action.title}</span>
+                          </div>
+                          <p className="text-sm text-muted-foreground text-left">
+                            {action.description}
+                          </p>
+                        </Button>
+                      )
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Recent Activity */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Recent Activity</CardTitle>
+                  <CardDescription>
+                    Latest service interactions and automation results
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    <div className="flex items-center justify-between border-b pb-4">
-                      <div>
-                        <p className="font-medium">Free Hosting Service A</p>
-                        <p className="text-sm text-muted-foreground">Approaching 90% of monthly bandwidth limit</p>
+                    <div className="flex items-center space-x-4">
+                      <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">OpenAI GPT-4 API call successful</p>
+                        <p className="text-xs text-muted-foreground">2 minutes ago</p>
                       </div>
-                      <Button variant="outline" size="sm">
-                        Manage
-                      </Button>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-medium">Free AI Inference Provider B</p>
-                        <p className="text-sm text-muted-foreground">5 API calls remaining for this month</p>
+                    <div className="flex items-center space-x-4">
+                      <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">Profile rotation completed</p>
+                        <p className="text-xs text-muted-foreground">15 minutes ago</p>
                       </div>
-                      <Button variant="outline" size="sm">
-                        Manage
-                      </Button>
+                    </div>
+                    <div className="flex items-center space-x-4">
+                      <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">Browserbase session started</p>
+                        <p className="text-xs text-muted-foreground">1 hour ago</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-4">
+                      <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">New service registered: Netlify</p>
+                        <p className="text-xs text-muted-foreground">3 hours ago</p>
+                      </div>
                     </div>
                   </div>
                 </CardContent>
               </Card>
-            </div>
-          </TabsContent>
-          <TabsContent value="services" className="space-y-4">
-            <div className="flex justify-between items-center">
-              <h2 className="text-xl font-bold tracking-tight">Your Services</h2>
-              <Link href="/services/add">
-                <Button>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add Service
-                </Button>
-              </Link>
-            </div>
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {services.map((service) => ( // Dynamically render services
-                <ServiceCard
-                  key={service.id}
-                  title={service.name}
-                  category={service.category}
-                  icon={<MessageSquare className="h-5 w-5" />} // Placeholder icon, would need mapping
-                  status={service.config.isActive ? "active" : "inactive"} // Basic status mapping
-                  usagePercent={service.config.usage.monthlyRequestsUsed ? (service.config.usage.monthlyRequestsUsed / (service.config.limits.monthlyRequests || 1)) * 100 : 0} // Example usage calculation
-                  lastUsed={service.config.lastUsed ? service.config.lastUsed.toLocaleTimeString() : "N/A"}
-                />
-              ))}
-            </div>
-          </TabsContent>
-          <TabsContent value="automations" className="space-y-4">
-            <div className="flex justify-between items-center">
-              <h2 className="text-xl font-bold tracking-tight">Your Automations</h2>
-              <Link href="/automations/create">
-                <Button>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Create Automation
-                </Button>
-              </Link>
-            </div>
-            <Card>
-              <CardHeader>
-                <CardTitle>Active Automations</CardTitle>
-                <CardDescription>Your currently active service automations</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {automations.map((automation) => ( // Dynamically render automations
-                    <div key={automation.id} className="flex items-center justify-between border-b pb-4">
-                      <div>
-                        <p className="font-medium">{automation.name}</p>
-                        <p className="text-sm text-muted-foreground">{automation.description}</p>
+            </TabsContent>
+
+            <TabsContent value="services" className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {services.map((service) => (
+                  <Card key={service.id}>
+                    <CardHeader className="pb-2">
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-base">{service.name}</CardTitle>
+                        {getStatusIcon(service.status)}
                       </div>
-                      <div className="flex items-center gap-2">
-                        <div className={`flex h-2 w-2 rounded-full ${automation.isRunning() ? 'bg-green-500' : 'bg-red-500'}`} />
-                        <span className="text-xs">{automation.isRunning() ? "Running" : "Stopped"}</span>
+                      <div className="flex items-center space-x-2">
+                        <Badge variant="secondary" className="text-xs">
+                          {service.category}
+                        </Badge>
+                        <Badge className={`text-xs ${getStatusColor(service.status)}`}>
+                          {service.status}
+                        </Badge>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-          <TabsContent value="usage" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Service Usage Overview</CardTitle>
-                <CardDescription>Monitor your usage across all connected services</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-8">
-                  <div>
-                    <div className="mb-2 flex items-center justify-between">
-                      <h3 className="font-semibold">Communication Services</h3>
-                      <span className="text-sm text-muted-foreground">3/3 services active</span>
-                    </div>
-                    <div className="space-y-2">
-                      <div className="space-y-1">
-                        <div className="flex items-center justify-between text-sm">
-                          <span>Free VOIP Service</span>
-                          <span>45%</span>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span>Usage</span>
+                          <span>{service.usage.current}/{service.usage.limit}</span>
                         </div>
-                        <div className="h-2 w-full rounded-full bg-muted">
-                          <div className="h-2 rounded-full bg-primary" style={{ width: "45%" }}></div>
-                        </div>
+                        <Progress 
+                          value={service.usage.percentage} 
+                          className="w-full"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Last used: {service.lastUsed}
+                        </p>
                       </div>
-                      <div className="space-y-1">
-                        <div className="flex items-center justify-between text-sm">
-                          <span>Free SIP Provider</span>
-                          <span>22%</span>
-                        </div>
-                        <div className="h-2 w-full rounded-full bg-muted">
-                          <div className="h-2 rounded-full bg-primary" style={{ width: "22%" }}></div>
-                        </div>
+                      <div className="flex space-x-2 mt-4">
+                        <Button size="sm" variant="outline" className="flex-1">
+                          Configure
+                        </Button>
+                        <Button size="sm" variant="outline" className="flex-1">
+                          Test
+                        </Button>
                       </div>
-                    </div>
-                  </div>
-                  <div>
-                    <div className="mb-2 flex items-center justify-between">
-                      <h3 className="font-semibold">Web Infrastructure</h3>
-                      <span className="text-sm text-muted-foreground">3/4 services active</span>
-                    </div>
-                    <div className="space-y-2">
-                      <div className="space-y-1">
-                        <div className="flex items-center justify-between text-sm">
-                          <span>Free Subdomain Service</span>
-                          <span>10%</span>
-                        </div>
-                        <div className="h-2 w-full rounded-full bg-muted">
-                          <div className="h-2 rounded-full bg-primary" style={{ width: "10%" }}></div>
-                        </div>
-                      </div>
-                      <div className="space-y-1">
-                        <div className="flex items-center justify-between text-sm">
-                          <span>Static Hosting Platform</span>
-                          <span>90%</span>
-                        </div>
-                        <div className="h-2 w-full rounded-full bg-muted">
-                          <div className="h-2 rounded-full bg-amber-500" style={{ width: "90%" }}></div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <div>
-                    <div className="mb-2 flex items-center justify-between">
-                      <h3 className="font-semibold">AI & ML Services</h3>
-                      <span className="text-sm text-muted-foreground">2/2 services active</span>
-                    </div>
-                    <div className="space-y-2">
-                      <div className="space-y-1">
-                        <div className="flex items-center justify-between text-sm">
-                          <span>Free AI Inference API</span>
-                          <span>95%</span>
-                        </div>
-                        <div className="h-2 w-full rounded-full bg-muted">
-                          <div className="h-2 rounded-full bg-red-500" style={{ width: "95%" }}></div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-          <TabsContent value="orchestration" className="space-y-4">
-            <div className="flex justify-between items-center">
-              <h2 className="text-xl font-bold tracking-tight">Orchestration Tasks</h2>
-              <div className="flex gap-2">
-                <Button onClick={handleAutoRegister} disabled={!isInitialized}>
-                  <Zap className="mr-2 h-4 w-4" />
-                  Auto-Register Services
-                </Button>
-                <Button variant="outline" onClick={async () => {
-                  const task = await orchestrator.createBulkRegistrationTask(['protonmail', 'mega'], 2);
-                  setOrchestrationTasks(orchestrator.getAllTasks());
-                }}>
-                  <Database className="mr-2 h-4 w-4" />
-                  Bulk Register
-                </Button>
+                    </CardContent>
+                  </Card>
+                ))}
               </div>
-            </div>
-            
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Active Tasks</CardTitle>
-                  <Activity className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{orchestrationTasks.filter(t => t.status === 'running').length}</div>
-                  <p className="text-xs text-muted-foreground">Currently processing</p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Completed Tasks</CardTitle>
-                  <Zap className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{orchestrationTasks.filter(t => t.status === 'completed').length}</div>
-                  <p className="text-xs text-muted-foreground">Successfully finished</p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Success Rate</CardTitle>
-                  <Activity className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">
-                    {orchestrationTasks.length > 0 
-                      ? Math.round((orchestrationTasks.filter(t => t.status === 'completed').length / orchestrationTasks.length) * 100)
-                      : 0}%
-                  </div>
-                  <p className="text-xs text-muted-foreground">Task completion rate</p>
-                </CardContent>
-              </Card>
-            </div>
+            </TabsContent>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Recent Orchestration Tasks</CardTitle>
-                <CardDescription>Monitor your automated service registration and management tasks</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {orchestrationTasks.length === 0 ? (
-                    <div className="text-center py-8 text-muted-foreground">
-                      <Zap className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                      <p>No orchestration tasks yet</p>
-                      <p className="text-sm">Click "Auto-Register Services" to get started</p>
-                    </div>
-                  ) : (
-                    orchestrationTasks.slice(0, 10).map((task) => (
-                      <div key={task.id} className="flex items-center justify-between border-b pb-4">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <p className="font-medium">{task.name}</p>
-                            <div className={`flex h-2 w-2 rounded-full ${
-                              task.status === 'running' ? 'bg-blue-500' :
-                              task.status === 'completed' ? 'bg-green-500' :
-                              task.status === 'failed' ? 'bg-red-500' :
-                              'bg-gray-500'
-                            }`} />
-                          </div>
+            <TabsContent value="system" className="space-y-4">
+              <SystemDashboard />
+            </TabsContent>
+
+            <TabsContent value="automations" className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Automation Workflows</CardTitle>
+                  <CardDescription>
+                    Manage your automated service workflows and tasks
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between p-4 border rounded-lg">
+                      <div className="flex items-center space-x-4">
+                        <Workflow className="h-8 w-8 text-blue-500" />
+                        <div>
+                          <h3 className="font-medium">Daily Service Health Check</h3>
                           <p className="text-sm text-muted-foreground">
-                            {task.type.replace('_', ' ').toUpperCase()} • {task.services.length} services
+                            Monitors all connected services and reports issues
                           </p>
-                          <div className="flex items-center gap-4 mt-2">
-                            <div className="text-xs text-muted-foreground">
-                              Progress: {task.progress}%
-                            </div>
-                            <div className="text-xs text-muted-foreground">
-                              Results: {task.results.filter(r => r.success).length}/{task.results.length} successful
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs capitalize px-2 py-1 rounded-full bg-muted">
-                            {task.status}
-                          </span>
-                          {task.status === 'running' && (
-                            <Button variant="outline" size="sm" onClick={() => orchestrator.pauseTask(task.id)}>
-                              Pause
-                            </Button>
-                          )}
-                          {task.status === 'paused' && (
-                            <Button variant="outline" size="sm" onClick={() => orchestrator.resumeTask(task.id)}>
-                              Resume
-                            </Button>
-                          )}
                         </div>
                       </div>
-                    ))
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+                      <div className="flex items-center space-x-2">
+                        <Badge className="bg-green-100 text-green-800">Active</Badge>
+                        <Button size="sm" variant="outline">
+                          Configure
+                        </Button>
+                      </div>
+                    </div>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Available Services for Auto-Registration</CardTitle>
-                <CardDescription>Services that can be automatically registered</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                  <Card className="p-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <MessageSquare className="h-5 w-5" />
-                      <h3 className="font-medium">ProtonMail</h3>
+                    <div className="flex items-center justify-between p-4 border rounded-lg">
+                      <div className="flex items-center space-x-4">
+                        <Bot className="h-8 w-8 text-purple-500" />
+                        <div>
+                          <h3 className="font-medium">Auto Service Registration</h3>
+                          <p className="text-sm text-muted-foreground">
+                            Automatically registers for new services when quotas are low
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Badge className="bg-yellow-100 text-yellow-800">Paused</Badge>
+                        <Button size="sm" variant="outline">
+                          Configure
+                        </Button>
+                      </div>
                     </div>
-                    <p className="text-sm text-muted-foreground mb-3">
-                      Secure email service with 500MB free storage
-                    </p>
-                    <Button size="sm" className="w-full" onClick={async () => {
-                      const task = await orchestrator.createAutoRegistrationTask(['protonmail']);
-                      setOrchestrationTasks(orchestrator.getAllTasks());
-                    }}>
-                      Auto-Register
-                    </Button>
-                  </Card>
-                  
-                  <Card className="p-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Database className="h-5 w-5" />
-                      <h3 className="font-medium">MEGA</h3>
-                    </div>
-                    <p className="text-sm text-muted-foreground mb-3">
-                      Cloud storage with 20GB free space
-                    </p>
-                    <Button size="sm" className="w-full" onClick={async () => {
-                      const task = await orchestrator.createAutoRegistrationTask(['mega']);
-                      setOrchestrationTasks(orchestrator.getAllTasks());
-                    }}>
-                      Auto-Register
-                    </Button>
-                  </Card>
 
-                  <Card className="p-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Globe className="h-5 w-5" />
-                      <h3 className="font-medium">Multiple Services</h3>
+                    <div className="flex items-center justify-between p-4 border rounded-lg">
+                      <div className="flex items-center space-x-4">
+                        <RotateCcw className="h-8 w-8 text-orange-500" />
+                        <div>
+                          <h3 className="font-medium">Profile Rotation Schedule</h3>
+                          <p className="text-sm text-muted-foreground">
+                            Rotates user profiles every 24 hours for better anonymity
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Badge className="bg-green-100 text-green-800">Active</Badge>
+                        <Button size="sm" variant="outline">
+                          Configure
+                        </Button>
+                      </div>
                     </div>
-                    <p className="text-sm text-muted-foreground mb-3">
-                      Register multiple services at once
-                    </p>
-                    <Button size="sm" className="w-full" onClick={handleAutoRegister}>
-                      Bulk Register
+                  </div>
+
+                  <div className="mt-6">
+                    <Button>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Create New Workflow
                     </Button>
-                  </Card>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
-      </DashboardShell>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
+        </div>
+      </main>
     </div>
   )
 }

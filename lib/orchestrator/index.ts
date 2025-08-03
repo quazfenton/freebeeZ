@@ -7,13 +7,20 @@ import { InMemoryServiceRegistry } from '../service-registry'
 import { LocalCredentialManager } from '../credential-manager'
 import { InMemoryAutomationRegistry } from '../automation-registry'
 import { ServiceIntegration, ServiceCategory } from '../service-integrations'
+import { StagehandEngine, StagehandWorkflow } from '../stagehand'
+import { AIQuotaPredictor } from '../ai-quota-predictor'
+import { ServiceDependencyMapper } from '../service-dependency-mapper'
+import { ProfileRotationManager } from '../profile-rotation-manager'
+import { ProxyRotationSystem } from '../proxy-rotation-system'
+import { PythonBridge } from '../python-bridge'
 
 export interface OrchestrationTask {
   id: string
   name: string
-  type: 'auto_register' | 'bulk_register' | 'service_rotation' | 'account_maintenance'
+  type: 'auto_register' | 'bulk_register' | 'service_rotation' | 'account_maintenance' | 'stagehand_workflow'
   services: string[] // Service template IDs
   profiles?: string[] // User profile IDs
+  workflow?: StagehandWorkflow // For Stagehand workflow tasks
   settings: OrchestrationSettings
   status: 'pending' | 'running' | 'completed' | 'failed' | 'paused'
   progress: number
@@ -63,6 +70,12 @@ export class FreebeeZOrchestrator {
   private serviceRegistry: InMemoryServiceRegistry
   private credentialManager: LocalCredentialManager
   private automationRegistry: InMemoryAutomationRegistry
+  private stagehandEngine: StagehandEngine
+  private aiQuotaPredictor: AIQuotaPredictor
+  private dependencyMapper: ServiceDependencyMapper
+  private profileRotationManager: ProfileRotationManager
+  private proxyRotationSystem: ProxyRotationSystem
+  private pythonBridge: PythonBridge
   
   private activeTasks: Map<string, OrchestrationTask> = new Map()
   private taskQueue: OrchestrationTask[] = []
@@ -76,6 +89,12 @@ export class FreebeeZOrchestrator {
     this.serviceRegistry = new InMemoryServiceRegistry()
     this.credentialManager = new LocalCredentialManager()
     this.automationRegistry = new InMemoryAutomationRegistry()
+    this.pythonBridge = new PythonBridge()
+    this.stagehandEngine = new StagehandEngine(this.browserEngine, this.pythonBridge)
+    this.aiQuotaPredictor = new AIQuotaPredictor()
+    this.dependencyMapper = new ServiceDependencyMapper()
+    this.profileRotationManager = new ProfileRotationManager()
+    this.proxyRotationSystem = new ProxyRotationSystem()
   }
 
   async initialize(config?: {
@@ -155,7 +174,7 @@ export class FreebeeZOrchestrator {
       results: [],
       createdAt: new Date()
     }
-
+  
     // Create profiles for bulk registration
     const profiles: string[] = []
     for (let i = 0; i < profileCount; i++) {
@@ -163,6 +182,37 @@ export class FreebeeZOrchestrator {
       profiles.push(profile.id)
     }
     task.profiles = profiles
+  
+    this.taskQueue.push(task)
+    return task
+  }
+
+  async createStagehandWorkflowTask(
+    workflow: StagehandWorkflow,
+    settings: Partial<OrchestrationSettings> = {}
+  ): Promise<OrchestrationTask> {
+    const task: OrchestrationTask = {
+      id: `stagehand_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      name: workflow.name,
+      type: 'stagehand_workflow',
+      services: [], // Stagehand workflows don't use service templates
+      workflow: workflow,
+      settings: {
+        maxConcurrent: 1, // Stagehand workflows run sequentially
+        retryAttempts: settings.retryAttempts ?? 3,
+        delayBetweenTasks: 0,
+        useRandomDelay: false,
+        browserRotation: settings.browserRotation ?? true,
+        profileRotation: settings.profileRotation ?? false,
+        notifyOnCompletion: settings.notifyOnCompletion ?? true,
+        notifyOnFailure: settings.notifyOnFailure ?? true,
+        ...settings
+      },
+      status: 'pending',
+      progress: 0,
+      results: [],
+      createdAt: new Date()
+    }
 
     this.taskQueue.push(task)
     return task
@@ -263,6 +313,9 @@ export class FreebeeZOrchestrator {
           break
         case 'account_maintenance':
           await this.processAccountMaintenance(task)
+          break
+        case 'stagehand_workflow':
+          await this.processStagehandWorkflow(task)
           break
       }
 
@@ -413,6 +466,28 @@ export class FreebeeZOrchestrator {
     console.log('Processing account maintenance task:', task.id)
   }
 
+  private async processStagehandWorkflow(task: OrchestrationTask): Promise<void> {
+    if (!task.workflow) {
+      throw new Error('Stagehand workflow task is missing workflow definition')
+    }
+    
+    const result = await this.stagehandEngine.executeWorkflow(task.workflow)
+    
+    task.results.push({
+      serviceId: 'stagehand_workflow',
+      profileId: 'n/a',
+      success: result.success,
+      credentials: result.data,
+      error: result.error,
+      duration: result.duration,
+      screenshots: result.screenshots,
+      logs: result.logs,
+      timestamp: new Date()
+    })
+    
+    task.progress = 100
+  }
+
   private async sendNotification(task: OrchestrationTask, status: string, error?: string): Promise<void> {
     const message = `Task ${task.name} ${status}${error ? `: ${error}` : ''}`
     console.log(`Notification: ${message}`)
@@ -425,9 +500,248 @@ export class FreebeeZOrchestrator {
     return new Promise(resolve => setTimeout(resolve, ms))
   }
 
+  // New methods for enhanced functionality
+
+  async createOptimizedSetupPlan(serviceIds: string[]): Promise<any> {
+    // Use dependency mapper to create an optimized setup plan
+    const setupPlan = this.dependencyMapper.generateSetupPlan(serviceIds)
+    
+    // Enhance with AI quota predictions
+    const quotaPredictions = await this.aiQuotaPredictor.getAllPredictions('day')
+    
+    return {
+      setupPlan,
+      quotaPredictions,
+      estimatedCost: this.calculateEstimatedCost(serviceIds),
+      riskAssessment: this.assessSetupRisk(serviceIds)
+    }
+  }
+
+  async createProfileRotationTask(
+    poolId: string,
+    rotationStrategy: any,
+    settings: Partial<OrchestrationSettings> = {}
+  ): Promise<OrchestrationTask> {
+    const task: OrchestrationTask = {
+      id: `profile_rotation_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      name: `Profile rotation for pool ${poolId}`,
+      type: 'service_rotation',
+      services: [],
+      settings: {
+        maxConcurrent: 1,
+        retryAttempts: 2,
+        delayBetweenTasks: 5000,
+        useRandomDelay: true,
+        browserRotation: true,
+        profileRotation: true,
+        notifyOnCompletion: true,
+        notifyOnFailure: true,
+        ...settings
+      },
+      status: 'pending',
+      progress: 0,
+      results: [],
+      createdAt: new Date()
+    }
+
+    this.taskQueue.push(task)
+    return task
+  }
+
+  async predictServiceUsage(serviceIds: string[], timeframe: 'hour' | 'day' | 'week' | 'month' = 'day'): Promise<any> {
+    const predictions = await Promise.all(
+      serviceIds.map(serviceId => this.aiQuotaPredictor.predictUsage(serviceId, timeframe))
+    )
+
+    return {
+      predictions,
+      totalPredictedUsage: predictions.reduce((sum, p) => sum + p.predictedUsage, 0),
+      averageConfidence: predictions.reduce((sum, p) => sum + p.confidence, 0) / predictions.length,
+      recommendations: predictions.flatMap(p => p.recommendations)
+    }
+  }
+
+  async analyzeServiceDependencies(serviceIds: string[]): Promise<any> {
+    const dependencyGraph = this.dependencyMapper.buildDependencyGraph()
+    const impactAnalyses = serviceIds.map(serviceId => 
+      this.dependencyMapper.analyzeDependencyImpact(serviceId)
+    )
+
+    return {
+      dependencyGraph,
+      impactAnalyses,
+      criticalServices: this.dependencyMapper.getCriticalServices(),
+      setupOrder: dependencyGraph.setupOrder.filter(id => serviceIds.includes(id))
+    }
+  }
+
+  async rotateProfile(poolId: string, reason?: string): Promise<any> {
+    const rotatedProfile = await this.profileRotationManager.rotateProfile(poolId, reason)
+    
+    if (rotatedProfile) {
+      // Update browser engine with new profile
+      const browserProfile = this.convertToBrowserProfile(rotatedProfile)
+      // Implementation would update browser engine
+    }
+
+    return {
+      success: !!rotatedProfile,
+      profile: rotatedProfile,
+      poolStatus: this.profileRotationManager.getPool(poolId)
+    }
+  }
+
+  async rotateProxy(poolId: string, reason?: string): Promise<any> {
+    const rotatedProxy = await this.proxyRotationSystem.rotateProxy(poolId, reason)
+    
+    return {
+      success: !!rotatedProxy,
+      proxy: rotatedProxy,
+      poolStatus: this.proxyRotationSystem.getPool(poolId)
+    }
+  }
+
+  async getSystemHealth(): Promise<any> {
+    const aiQuotas = await this.aiQuotaPredictor.getAllQuotas()
+    const proxyPools = this.proxyRotationSystem.getAllPools()
+    const profilePools = this.profileRotationManager.getAllPools()
+    const activeTasks = this.getAllTasks()
+
+    return {
+      aiServices: {
+        quotas: aiQuotas,
+        totalServices: aiQuotas.length,
+        healthyServices: aiQuotas.filter(q => q.remainingQuota > q.totalQuota * 0.2).length
+      },
+      proxySystem: {
+        pools: proxyPools.length,
+        totalProxies: proxyPools.reduce((sum, p) => sum + p.statistics.totalProxies, 0),
+        activeProxies: proxyPools.reduce((sum, p) => sum + p.statistics.activeProxies, 0),
+        averageHealth: proxyPools.reduce((sum, p) => sum + p.statistics.averageHealth, 0) / proxyPools.length
+      },
+      profileSystem: {
+        pools: profilePools.length,
+        totalProfiles: this.profileRotationManager.getAllProfiles().length,
+        activeProfiles: this.profileRotationManager.getActiveProfiles().length
+      },
+      orchestration: {
+        activeTasks: activeTasks.filter(t => t.status === 'running').length,
+        queuedTasks: activeTasks.filter(t => t.status === 'pending').length,
+        completedTasks: activeTasks.filter(t => t.status === 'completed').length,
+        failedTasks: activeTasks.filter(t => t.status === 'failed').length
+      },
+      pythonBridge: {
+        queueLength: this.pythonBridge.getQueueLength(),
+        activeProcesses: this.pythonBridge.getActiveProcessCount()
+      }
+    }
+  }
+
+  async optimizeSystem(): Promise<any> {
+    // Optimize AI quota usage
+    const aiOptimizations = await Promise.all(
+      (await this.aiQuotaPredictor.getAllQuotas()).map(quota => 
+        this.aiQuotaPredictor.optimizeUsage(quota.serviceId)
+      )
+    )
+
+    // Optimize proxy pools
+    await this.proxyRotationSystem.optimizeProxyPools()
+
+    // Optimize profile rotation strategies
+    this.profileRotationManager.optimizeRotationStrategies()
+
+    return {
+      aiOptimizations,
+      message: 'System optimization completed',
+      timestamp: new Date()
+    }
+  }
+
+  async runAdvancedAutomation(config: any): Promise<any> {
+    // Use Python bridge for advanced automation
+    const result = await this.pythonBridge.runAdvancedAutomation(config)
+    
+    return {
+      success: result.success,
+      output: result.stdout,
+      error: result.stderr,
+      duration: result.duration
+    }
+  }
+
+  private calculateEstimatedCost(serviceIds: string[]): number {
+    // Implementation would calculate estimated costs
+    return serviceIds.length * 0.1 // Mock calculation
+  }
+
+  private assessSetupRisk(serviceIds: string[]): string {
+    const riskFactors = serviceIds.length
+    if (riskFactors > 10) return 'high'
+    if (riskFactors > 5) return 'medium'
+    return 'low'
+  }
+
+  private convertToBrowserProfile(userProfile: any): BrowserProfile {
+    // Convert user profile to browser profile format
+    return {
+      id: userProfile.id,
+      name: userProfile.name,
+      userAgent: userProfile.browserProfile?.userAgent || '',
+      viewport: userProfile.browserProfile?.viewport || { width: 1920, height: 1080 },
+      timezone: userProfile.preferences?.timezone || 'UTC',
+      locale: userProfile.preferences?.language || 'en-US',
+      cookies: [],
+      localStorage: {},
+      sessionStorage: {},
+      fingerprint: userProfile.browserProfile?.fingerprint || {
+        screen: { width: 1920, height: 1080, colorDepth: 24 },
+        canvas: '',
+        webgl: '',
+        fonts: [],
+        plugins: [],
+        languages: []
+      },
+      createdAt: userProfile.createdAt,
+      lastUsed: userProfile.lastUsed
+    }
+  }
+
+  // Getters for accessing subsystems
+  getBrowserEngine(): BrowserAutomationEngine {
+    return this.browserEngine
+  }
+
+  getAIQuotaPredictor(): AIQuotaPredictor {
+    return this.aiQuotaPredictor
+  }
+
+  getDependencyMapper(): ServiceDependencyMapper {
+    return this.dependencyMapper
+  }
+
+  getProfileRotationManager(): ProfileRotationManager {
+    return this.profileRotationManager
+  }
+
+  getProxyRotationSystem(): ProxyRotationSystem {
+    return this.proxyRotationSystem
+  }
+
+  getPythonBridge(): PythonBridge {
+    return this.pythonBridge
+  }
+
+  getStagehandEngine(): StagehandEngine {
+    return this.stagehandEngine
+  }
+
   async cleanup(): Promise<void> {
     this.isProcessing = false
     await this.browserEngine.cleanup()
     await this.discoveryEngine.cleanup()
+    this.pythonBridge.cleanup()
+    this.profileRotationManager.cleanup()
+    this.proxyRotationSystem.cleanup()
   }
 }

@@ -1,72 +1,94 @@
-// Browser Automation Framework for FreebeeZ
-import puppeteer, { Browser, Page } from 'puppeteer'
+import puppeteer, { Browser, Page } from 'puppeteer-core';
+import { BrowserbaseAdapter } from './browserbase-adapter';
+import { ProxyConfig } from '../types';
+
+declare const process: {
+  env: {
+    BROWSERBASE_API_KEY?: string;
+    BROWSERBASE_ENDPOINT?: string;
+  };
+};
 
 export interface BrowserProfile {
-  id: string
-  name: string
-  userAgent: string
-  viewport: { width: number; height: number }
-  timezone: string
-  locale: string
-  cookies: any[]
-  localStorage: Record<string, string>
-  sessionStorage: Record<string, string>
-  fingerprint: BrowserFingerprint
-  createdAt: Date
-  lastUsed: Date
+  id: string;
+  name: string;
+  userAgent: string;
+  viewport: { width: number; height: number };
+  timezone: string;
+  locale: string;
+  cookies: any[];
+  localStorage: Record<string, string>;
+  sessionStorage: Record<string, string>;
+  fingerprint: BrowserFingerprint;
+  createdAt: Date;
+  lastUsed: Date;
 }
 
 export interface BrowserFingerprint {
-  screen: { width: number; height: number; colorDepth: number }
-  canvas: string
-  webgl: string
-  fonts: string[]
-  plugins: string[]
-  languages: string[]
+  screen: { width: number; height: number; colorDepth: number };
+  canvas: string;
+  webgl: string;
+  fonts: string[];
+  plugins: string[];
+  languages: string[];
 }
 
 export interface CaptchaConfig {
-  provider: 'recaptcha' | '2captcha' | 'anticaptcha' | 'manual'
-  apiKey?: string
-  timeout: number
-  retries: number
+  provider: 'recaptcha' | '2captcha' | 'anticaptcha' | 'manual';
+  apiKey?: string;
+  timeout: number;
+  retries: number;
 }
 
 export interface AutomationTask {
-  id: string
-  name: string
-  url: string
-  steps: AutomationStep[]
-  profile?: BrowserProfile
-  captchaConfig?: CaptchaConfig
-  retries: number
-  timeout: number
+  id: string;
+  name: string;
+  url: string;
+  steps: AutomationStep[];
+  profile?: BrowserProfile;
+  captchaConfig?: CaptchaConfig;
+  proxy?: ProxyConfig;
+  retries: number;
+  timeout: number;
 }
 
 export interface AutomationStep {
-  type: 'navigate' | 'click' | 'type' | 'wait' | 'extract' | 'screenshot' | 'custom'
-  selector?: string
-  value?: string
-  timeout?: number
-  condition?: string
-  customFunction?: (page: Page) => Promise<any>
+  type: 'navigate' | 'click' | 'type' | 'wait' | 'extract' | 'screenshot' | 'custom';
+  selector?: string;
+  value?: string;
+  timeout?: number;
+  condition?: string;
+  customFunction?: (page: Page) => Promise<any>;
 }
 
 export interface AutomationResult {
-  success: boolean
-  data?: any
-  error?: string
-  screenshots: string[]
-  logs: string[]
-  duration: number
+  success: boolean;
+  data?: any;
+  error?: string;
+  screenshots: string[];
+  logs: string[];
+  duration: number;
 }
 
 export class BrowserAutomationEngine {
-  private browser: Browser | null = null
-  private profiles: Map<string, BrowserProfile> = new Map()
-  private activeSessions: Map<string, Page> = new Map()
+  private browser: Browser | null = null;
+  private browserbaseAdapter: BrowserbaseAdapter | null = null;
+  private profiles: Map<string, BrowserProfile> = new Map();
+  private activeSessions: Map<string, Page> = new Map();
 
   async initialize(): Promise<void> {
+    // Initialize Browserbase if API key is available
+    const browserbaseApiKey = process.env.BROWSERBASE_API_KEY;
+    if (browserbaseApiKey) {
+      this.browserbaseAdapter = new BrowserbaseAdapter(
+        browserbaseApiKey,
+        process.env.BROWSERBASE_ENDPOINT || 'https://api.browserbase.com'
+      );
+      await this.browserbaseAdapter.initialize();
+      return;
+    }
+
+    // Fallback to local browser
     this.browser = await puppeteer.launch({
       headless: 'new',
       args: [
@@ -80,7 +102,7 @@ export class BrowserAutomationEngine {
         '--disable-web-security',
         '--disable-features=VizDisplayCompositor'
       ]
-    })
+    });
   }
 
   async createProfile(name: string): Promise<BrowserProfile> {
@@ -97,132 +119,144 @@ export class BrowserAutomationEngine {
       fingerprint: await this.generateFingerprint(),
       createdAt: new Date(),
       lastUsed: new Date()
-    }
+    };
 
-    this.profiles.set(profile.id, profile)
-    return profile
+    this.profiles.set(profile.id, profile);
+    return profile;
   }
 
   async executeTask(task: AutomationTask): Promise<AutomationResult> {
-    const startTime = Date.now()
-    const screenshots: string[] = []
-    const logs: string[] = []
+    const startTime = Date.now();
+    const screenshots: string[] = [];
+    const logs: string[] = [];
 
     try {
-      if (!this.browser) {
-        await this.initialize()
+      if (!this.browser && !this.browserbaseAdapter) {
+        await this.initialize();
       }
 
-      const page = await this.browser!.newPage()
+      let page: Page;
       
-      // Apply profile if specified
-      if (task.profile) {
-        await this.applyProfile(page, task.profile)
+      // Use Browserbase if available
+      if (this.browserbaseAdapter) {
+        page = await this.browserbaseAdapter.createSession(
+          task.profile || await this.createProfile('auto-profile'),
+          task.proxy?.url
+        );
+      }
+      // Fallback to local browser
+      else if (this.browser) {
+        page = await this.browser.newPage();
+        if (task.profile) {
+          await this.applyProfile(page, task.profile);
+        }
+      } else {
+        throw new Error('No browser instance available');
       }
 
       // Set up logging
-      page.on('console', msg => logs.push(`Console: ${msg.text()}`))
-      page.on('pageerror', error => logs.push(`Page Error: ${error.message}`))
+      page.on('console', (msg: { text(): string }) => logs.push(`Console: ${msg.text()}`));
+      page.on('pageerror', (error: { message: string }) => logs.push(`Page Error: ${error.message}`));
 
       // Execute steps
       for (const step of task.steps) {
-        await this.executeStep(page, step, screenshots, logs)
+        await this.executeStep(page, step, screenshots, logs);
       }
 
-      await page.close()
+      await page.close();
 
       return {
         success: true,
         screenshots,
         logs,
         duration: Date.now() - startTime
-      }
+      };
 
-    } catch (error) {
+    } catch (error: any) {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
         screenshots,
         logs,
         duration: Date.now() - startTime
-      }
+      };
     }
   }
 
   private async executeStep(page: Page, step: AutomationStep, screenshots: string[], logs: string[]): Promise<void> {
-    logs.push(`Executing step: ${step.type}`)
+    logs.push(`Executing step: ${step.type}`);
 
     switch (step.type) {
       case 'navigate':
-        await page.goto(step.value!, { waitUntil: 'networkidle2', timeout: step.timeout || 30000 })
-        break
+        await page.goto(step.value!, { waitUntil: 'networkidle2', timeout: step.timeout || 30000 });
+        break;
 
       case 'click':
-        await page.waitForSelector(step.selector!, { timeout: step.timeout || 10000 })
-        await page.click(step.selector!)
-        break
+        await page.waitForSelector(step.selector!, { timeout: step.timeout || 10000 });
+        await page.click(step.selector!);
+        break;
 
       case 'type':
-        await page.waitForSelector(step.selector!, { timeout: step.timeout || 10000 })
-        await page.type(step.selector!, step.value!, { delay: 100 })
-        break
+        await page.waitForSelector(step.selector!, { timeout: step.timeout || 10000 });
+        await page.type(step.selector!, step.value!, { delay: 100 });
+        break;
 
       case 'wait':
         if (step.selector) {
-          await page.waitForSelector(step.selector, { timeout: step.timeout || 10000 })
+          await page.waitForSelector(step.selector, { timeout: step.timeout || 10000 });
         } else {
-          await page.waitForTimeout(parseInt(step.value!) || 1000)
+          await page.waitForTimeout(parseInt(step.value!) || 1000);
         }
-        break
+        break;
 
       case 'extract':
-        const data = await page.evaluate((selector) => {
-          const element = document.querySelector(selector)
-          return element ? element.textContent : null
-        }, step.selector!)
-        logs.push(`Extracted data: ${data}`)
-        break
+        const data = await page.evaluate((selector: string) => {
+          const element = document.querySelector(selector);
+          return element ? element.textContent : null;
+        }, step.selector!);
+        logs.push(`Extracted data: ${data}`);
+        break;
 
       case 'screenshot':
-        const screenshot = await page.screenshot({ encoding: 'base64' })
-        screenshots.push(screenshot as string)
-        break
+        const screenshot = await page.screenshot({ encoding: 'base64' });
+        screenshots.push(screenshot as string);
+        break;
 
       case 'custom':
         if (step.customFunction) {
-          await step.customFunction(page)
+          await step.customFunction(page);
         }
-        break
+        break;
     }
   }
 
   private async applyProfile(page: Page, profile: BrowserProfile): Promise<void> {
     // Set user agent
-    await page.setUserAgent(profile.userAgent)
+    await page.setUserAgent(profile.userAgent);
 
     // Set viewport
-    await page.setViewport(profile.viewport)
+    await page.setViewport(profile.viewport);
 
     // Set timezone and locale
-    await page.emulateTimezone(profile.timezone)
+    await page.emulateTimezone(profile.timezone);
     await page.setExtraHTTPHeaders({
       'Accept-Language': profile.locale
-    })
+    });
 
     // Set cookies
     if (profile.cookies.length > 0) {
-      await page.setCookie(...profile.cookies)
+      await page.setCookie(...profile.cookies);
     }
 
     // Set local and session storage
-    await page.evaluateOnNewDocument((localStorage, sessionStorage) => {
+    await page.evaluateOnNewDocument((localStorage: Record<string, string>, sessionStorage: Record<string, string>) => {
       Object.entries(localStorage).forEach(([key, value]) => {
-        window.localStorage.setItem(key, value)
-      })
+        window.localStorage.setItem(key, value);
+      });
       Object.entries(sessionStorage).forEach(([key, value]) => {
-        window.sessionStorage.setItem(key, value)
-      })
-    }, profile.localStorage, profile.sessionStorage)
+        window.sessionStorage.setItem(key, value);
+      });
+    }, profile.localStorage as Record<string, string>, profile.sessionStorage as Record<string, string>);
   }
 
   private generateRandomUserAgent(): string {
@@ -230,8 +264,8 @@ export class BrowserAutomationEngine {
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    ]
-    return userAgents[Math.floor(Math.random() * userAgents.length)]
+    ];
+    return userAgents[Math.floor(Math.random() * userAgents.length)];
   }
 
   private generateRandomViewport(): { width: number; height: number } {
@@ -240,8 +274,8 @@ export class BrowserAutomationEngine {
       { width: 1366, height: 768 },
       { width: 1440, height: 900 },
       { width: 1536, height: 864 }
-    ]
-    return viewports[Math.floor(Math.random() * viewports.length)]
+    ];
+    return viewports[Math.floor(Math.random() * viewports.length)];
   }
 
   private generateRandomTimezone(): string {
@@ -251,13 +285,13 @@ export class BrowserAutomationEngine {
       'Europe/London',
       'Europe/Berlin',
       'Asia/Tokyo'
-    ]
-    return timezones[Math.floor(Math.random() * timezones.length)]
+    ];
+    return timezones[Math.floor(Math.random() * timezones.length)];
   }
 
   private generateRandomLocale(): string {
-    const locales = ['en-US', 'en-GB', 'de-DE', 'fr-FR', 'es-ES']
-    return locales[Math.floor(Math.random() * locales.length)]
+    const locales = ['en-US', 'en-GB', 'de-DE', 'fr-FR', 'es-ES'];
+    return locales[Math.floor(Math.random() * locales.length)];
   }
 
   private async generateFingerprint(): Promise<BrowserFingerprint> {
@@ -268,14 +302,14 @@ export class BrowserAutomationEngine {
       fonts: ['Arial', 'Times New Roman', 'Helvetica'],
       plugins: ['Chrome PDF Plugin', 'Chrome PDF Viewer'],
       languages: ['en-US', 'en']
-    }
+    };
   }
 
   async cleanup(): Promise<void> {
     if (this.browser) {
-      await this.browser.close()
-      this.browser = null
+      await this.browser.close();
+      this.browser = null;
     }
-    this.activeSessions.clear()
+    this.activeSessions.clear();
   }
 }
