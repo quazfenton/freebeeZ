@@ -1,3 +1,6 @@
+" a web app that serves as a a central hub / singular frontend for users connecting to a multitude of free services and abstracting away tedious  multi-account signups /interconnectivity and linking of utilities/ acct rotation,lim& management. extended capabilities in advanced crawling, automated registrations and associated email accountt creation, advanced newer methods of  maneuvering + captcha  or standby/notifications if stuck needing user input,   puppeteer etc. consistent profiles, rotation & storage, crawling/scraping/ppuppeteer etc. and browser use tools 
+
+
 # FreebeeZ - Free Service Automation Hub
 
 FreebeeZ is a comprehensive web application that serves as a central hub for connecting to and managing multiple free services. It abstracts away tedious multi-account signups, interconnectivity, and account management through advanced automation, crawling, and browser manipulation techniques.
