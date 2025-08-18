@@ -1,69 +1,92 @@
-import type { ServiceCategory, ServiceConfig, ServiceIntegration } from "../service-integrations"
+import { ServiceIntegration, ServiceConfig, BaseServiceIntegration } from '../service-integrations';
+import { FreeEmailService } from '../service-integrations/free-email-service';
+import { FreeFileStorageService } from '../service-integrations/free-file-storage-service';
+import { GitHubService, NetlifyService, VercelService, RailwayService } from '../service-integrations/advanced-services';
+import winston from 'winston';
 
-export interface ServiceRegistry {
-  // Registration
-  registerService(service: ServiceIntegration): Promise<boolean>
-  unregisterService(serviceId: string): Promise<boolean>
+const logger = winston.createLogger({
+  level: 'info',
+  format: winston.format.combine(
+    winston.format.timestamp(),
+    winston.format.json()
+  ),
+  transports: [
+    new winston.transports.Console(),
+  ],
+});
 
-  // Retrieval
-  getService(serviceId: string): Promise<ServiceIntegration | null>
-  getServicesByCategory(category: ServiceCategory): Promise<ServiceIntegration[]>
-  getAllServices(): Promise<ServiceIntegration[]>
+export class ServiceRegistry {
+  private services: Map<string, ServiceIntegration> = new Map();
 
-  // Filtering
-  findServices(filter: Partial<ServiceConfig>): Promise<ServiceIntegration[]>
+  constructor() {
+    // Register known services
+    // In a real application, these would be loaded from a configuration or database
+    this.registerServiceType('FreeEmailService', FreeEmailService);
+    this.registerServiceType('FreeFileStorageService', FreeFileStorageService);
+    this.registerServiceType('GitHubService', GitHubService);
+    this.registerServiceType('NetlifyService', NetlifyService);
+    this.registerServiceType('VercelService', VercelService);
+    this.registerServiceType('RailwayService', RailwayService);
+  }
 
-  // Status
-  isServiceRegistered(serviceId: string): Promise<boolean>
-}
+  private serviceConstructors: Map<string, new (config: ServiceConfig) => ServiceIntegration> = new Map();
 
-export class InMemoryServiceRegistry implements ServiceRegistry {
-  private services: Map<string, ServiceIntegration> = new Map()
+  public registerServiceType(type: string, constructor: new (config: ServiceConfig) => ServiceIntegration): void {
+    this.serviceConstructors.set(type, constructor);
+    logger.info(`Registered service type: ${type}`);
+  }
 
-  async registerService(service: ServiceIntegration): Promise<boolean> {
-    try {
-      this.services.set(service.id, service)
-      return true
-    } catch (error) {
-      console.error("Failed to register service:", error)
-      return false
+  public createService(type: string, config: ServiceConfig): ServiceIntegration {
+    const ServiceConstructor = this.serviceConstructors.get(type);
+    if (!ServiceConstructor) {
+      logger.error(`Attempted to create unregistered service type: ${type}`);
+      throw new Error(`Service type ${type} is not registered.`);
+    }
+    const service = new ServiceConstructor(config);
+    this.services.set(service.id, service);
+    logger.info(`Created service: ${service.name} (ID: ${service.id}, Type: ${type})`);
+    return service;
+  }
+
+  public getService(id: string): ServiceIntegration | undefined {
+    const service = this.services.get(id);
+    if (!service) {
+      logger.warn(`Attempted to retrieve non-existent service with ID: ${id}`);
+    }
+    return service;
+  }
+
+  public getAllServices(): ServiceIntegration[] {
+    return Array.from(this.services.values());
+  }
+
+  public async initializeServices(serviceConfigs: ServiceConfig[]): Promise<void> {
+    for (const config of serviceConfigs) {
+      try {
+        const service = this.createService(config.name, config); // Assuming config.name matches registered type
+        // Optionally connect services on initialization if they are marked as active
+        if (config.isActive && service.connect) {
+          await service.connect(config.credentials);
+          logger.info(`Initialized and connected service: ${service.name}`);
+        }
+      } catch (error) {
+        logger.error(`Failed to initialize service ${config.name}:`, error);
+      }
     }
   }
 
-  async unregisterService(serviceId: string): Promise<boolean> {
-    try {
-      return this.services.delete(serviceId)
-    } catch (error) {
-      console.error("Failed to unregister service:", error)
-      return false
-    }
-  }
-
-  async getService(serviceId: string): Promise<ServiceIntegration | null> {
-    return this.services.get(serviceId) || null
-  }
-
-  async getServicesByCategory(category: ServiceCategory): Promise<ServiceIntegration[]> {
-    return Array.from(this.services.values()).filter((service) => service.category === category)
-  }
-
-  async getAllServices(): Promise<ServiceIntegration[]> {
-    return Array.from(this.services.values())
-  }
-
-  async findServices(filter: Partial<ServiceConfig>): Promise<ServiceIntegration[]> {
-    return Array.from(this.services.values()).filter((service) => {
-      // Simple filtering logic - can be expanded as needed
-      for (const [key, value] of Object.entries(filter)) {
-        if ((service as any)[key] !== value) {
-          return false
+  public async shutdownServices(): Promise<void> {
+    for (const service of this.services.values()) {
+      if (service.isConnected() && service.disconnect) {
+        try {
+          await service.disconnect();
+          logger.info(`Disconnected service: ${service.name}`);
+        } catch (error) {
+          logger.error(`Error disconnecting service ${service.name}:`, error);
         }
       }
-      return true
-    })
-  }
-
-  async isServiceRegistered(serviceId: string): Promise<boolean> {
-    return this.services.has(serviceId)
+    }
+    this.services.clear();
+    logger.info('All services shut down.');
   }
 }

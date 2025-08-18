@@ -1,80 +1,115 @@
-// Enhanced Browserbase Adapter for FreebeeZ
-// Provides comprehensive cloud-based browser automation
-
-import { Browser, Page, BrowserContextOptions } from 'puppeteer-core'
 import { BrowserProfile } from './index'
 import { ProxyConfig } from '../types'
+import winston from 'winston';
+import { Browser, Page } from 'puppeteer-core';
+
+const logger = winston.createLogger({
+  level: 'info',
+  format: winston.format.combine(
+    winston.format.timestamp(),
+    winston.format.json()
+  ),
+  transports: [
+    new winston.transports.Console(),
+  ],
+});
 
 export interface BrowserbaseConfig {
-  apiKey: string
-  endpoint?: string
-  projectId?: string
-  defaultTimeout?: number
-  maxConcurrentSessions?: number
-  enableRecording?: boolean
+  apiKey: string;
+  projectId: string;
+  baseUrl?: string;
+  endpoint?: string;
+  defaultTimeout?: number;
+  maxConcurrentSessions?: number;
+  enableRecording?: boolean;
   enableDebugging?: boolean
 }
 
+export interface BrowserProfile {
+  id: string;
+  name: string;
+  userAgent: string;
+  viewport: { width: number; height: number };
+  locale: string;
+  timezone: string;
+  cookies?: any[];
+  localStorage?: Record<string, string>;
+  sessionStorage?: Record<string, string>;
+}
+
 export interface BrowserbaseSession {
-  id: string
-  status: 'starting' | 'running' | 'completed' | 'failed' | 'timeout'
-  browserWSEndpoint?: string
-  debuggerUrl?: string
-  recordingUrl?: string
-  createdAt: Date
-  startedAt?: Date
-  completedAt?: Date
-  duration?: number
-  error?: string
-  page?: Page
-  browser?: Browser
+  id: string;
+  status: 'starting' | 'running' | 'completed' | 'failed' | 'timeout';
+  browserWSEndpoint?: string;
+  debuggerUrl?: string;
+  recordingUrl?: string;
+  createdAt: Date;
+  startedAt?: Date;
+  completedAt?: Date;
+  duration?: number;
+  error?: string;
   metadata: {
-    profile?: BrowserProfile
-    proxy?: ProxyConfig
-    region?: string
-    browserVersion?: string
-    userAgent?: string
+    profile?: BrowserProfile;
+    proxy?: ProxyConfig;
+    region?: string;
+    browserVersion?: string;
+    userAgent?: string;
   }
 }
 
 export interface BrowserbaseSessionOptions {
-  profile?: BrowserProfile
-  proxy?: ProxyConfig
-  region?: 'us-east-1' | 'us-west-2' | 'eu-west-1' | 'ap-southeast-1'
-  browserVersion?: string
-  timeout?: number
-  enableRecording?: boolean
-  enableDebugging?: boolean
-  viewport?: { width: number; height: number }
-  userAgent?: string
-  extraHeaders?: Record<string, string>
-  geolocation?: { latitude: number; longitude: number }
-  timezone?: string
-  locale?: string
+  profile?: BrowserProfile;
+  proxy?: ProxyConfig;
+  region?: 'us-east-1' | 'us-west-2' | 'eu-west-1' | 'ap-southeast-1';
+  browserVersion?: string;
+  timeout?: number;
+  enableRecording?: boolean;
+  enableDebugging?: boolean;
+  viewport?: { width: number; height: number };
+  userAgent?: string;
+  extraHeaders?: Record<string, string>;
+  geolocation?: { latitude: number; longitude: number };
+  timezone?: string;
+  locale?: string;
 }
 
 export interface BrowserbaseUsage {
-  sessionsUsed: number
-  sessionsLimit: number
-  minutesUsed: number
-  minutesLimit: number
-  storageUsed: number
-  storageLimit: number
-  bandwidthUsed: number
-  bandwidthLimit: number
-  resetDate: Date
+  sessionsUsed: number;
+  sessionsLimit: number;
+  minutesUsed: number;
+  minutesLimit: number;
+  storageUsed: number;
+  storageLimit: number;
+  bandwidthUsed: number;
+  bandwidthLimit: number;
+  resetDate: Date;
 }
 
-/**
- * Enhanced Browserbase Adapter with advanced features
- */
+export interface BrowserbaseMetrics {
+  averageSessionDuration: number;
+  successRate: number;
+  errorRate: number;
+  mostUsedRegions: string[];
+  peakUsageHours: number[];
+  totalSessions: number;
+  totalMinutes: number;
+}
+
 export class BrowserbaseAdapter {
-  private config: BrowserbaseConfig
-  private activeSessions: Map<string, BrowserbaseSession> = new Map()
-  private sessionQueue: Array<{ options: BrowserbaseSessionOptions; resolve: Function; reject: Function }> = []
-  private isProcessingQueue = false
-  private usage?: BrowserbaseUsage
-  private connectionPool: Map<string, Browser> = new Map()
+  private config: BrowserbaseConfig;
+  private activeSessions: Map<string, BrowserbaseSession> = new Map();
+  private sessionQueue: Array<{ options: BrowserbaseSessionOptions; resolve: Function; reject: Function }> = [];
+  private isProcessingQueue = false;
+  private usage?: BrowserbaseUsage;
+  private metrics: BrowserbaseMetrics = {
+    averageSessionDuration: 0,
+    successRate: 0,
+    errorRate: 0,
+    mostUsedRegions: [],
+    peakUsageHours: [],
+    totalSessions: 0,
+    totalMinutes: 0
+  };
 
   constructor(config: BrowserbaseConfig) {
     this.config = {
@@ -83,21 +118,20 @@ export class BrowserbaseAdapter {
       maxConcurrentSessions: 5,
       enableRecording: false,
       enableDebugging: false,
+      baseUrl: config.baseUrl || 'https://www.browserbase.com/api/v1',
       ...config
     }
     
-    this.startQueueProcessor()
-    this.startUsageMonitoring()
-  }
-
-  async initialize(): Promise<void> {
-    // Test connection to Browserbase
-    await this.healthCheck()
+    this.startQueueProcessor();
+    this.startUsageMonitoring();
+    logger.info('BrowserbaseAdapter initialized.');
   }
 
   async createSession(options: BrowserbaseSessionOptions = {}): Promise<BrowserbaseSession> {
+    logger.info('Attempting to create new Browserbase session.');
     // Check if we're at capacity
     if (this.activeSessions.size >= this.config.maxConcurrentSessions!) {
+      logger.warn(`Max concurrent sessions reached (${this.activeSessions.size}/${this.config.maxConcurrentSessions}). Adding to queue.`);
       return new Promise((resolve, reject) => {
         this.sessionQueue.push({ options, resolve, reject })
       })
@@ -108,6 +142,7 @@ export class BrowserbaseAdapter {
 
   private async createSessionInternal(options: BrowserbaseSessionOptions): Promise<BrowserbaseSession> {
     const sessionId = `bb_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    logger.info(`Creating internal session with ID: ${sessionId}`);
     
     const session: BrowserbaseSession = {
       id: sessionId,
@@ -125,7 +160,6 @@ export class BrowserbaseAdapter {
     this.activeSessions.set(sessionId, session)
 
     try {
-      // Create session via Browserbase API
       const response = await this.makeApiRequest('POST', '/sessions', {
         projectId: this.config.projectId,
         region: options.region || 'us-east-1',
@@ -133,12 +167,12 @@ export class BrowserbaseAdapter {
         timeout: options.timeout || this.config.defaultTimeout,
         enableRecording: options.enableRecording ?? this.config.enableRecording,
         enableDebugging: options.enableDebugging ?? this.config.enableDebugging,
-        viewport: options.viewport || options.profile?.viewport || { width: 1920, height: 1080 },
-        userAgent: options.userAgent || options.profile?.userAgent || this.generateUserAgent(),
+        viewport: options.viewport || { width: 1920, height: 1080 },
+        userAgent: options.userAgent || this.generateUserAgent(options.profile),
         extraHeaders: options.extraHeaders || {},
         geolocation: options.geolocation,
-        timezone: options.timezone || options.profile?.timezone || 'America/New_York',
-        locale: options.locale || options.profile?.locale || 'en-US',
+        timezone: options.timezone || 'America/New_York',
+        locale: options.locale || 'en-US',
         proxy: options.proxy ? this.formatProxyConfig(options.proxy) : undefined
       })
 
@@ -148,31 +182,22 @@ export class BrowserbaseAdapter {
         session.browserWSEndpoint = response.data.browserWSEndpoint
         session.debuggerUrl = response.data.debuggerUrl
         session.recordingUrl = response.data.recordingUrl
-
-        // Connect to the browser
-        const browser = await this.connectToBrowser(session.browserWSEndpoint!)
-        const page = await browser.newPage()
-
-        // Apply profile settings
-        if (options.profile) {
-          await this.applyProfile(page, options.profile)
-        }
-
-        session.browser = browser
-        session.page = page
+        logger.info(`Session ${sessionId} created and running. WS Endpoint: ${session.browserWSEndpoint}`);
 
         // Set up session monitoring
         this.monitorSession(session)
 
         return session
       } else {
+        logger.error(`Failed to create Browserbase session ${sessionId}: ${response.error}`);
         throw new Error(response.error || 'Failed to create Browserbase session')
       }
 
-    } catch (error) {
+    } catch (error: any) {
       session.status = 'failed'
       session.error = error instanceof Error ? error.message : 'Unknown error'
       session.completedAt = new Date()
+      logger.error(`Error during session creation for ${sessionId}: ${session.error}`);
       
       this.activeSessions.delete(sessionId)
       this.processQueue()
@@ -181,130 +206,15 @@ export class BrowserbaseAdapter {
     }
   }
 
-  private async connectToBrowser(wsEndpoint: string): Promise<Browser> {
-    // Check if we already have a connection to this endpoint
-    if (this.connectionPool.has(wsEndpoint)) {
-      const existingBrowser = this.connectionPool.get(wsEndpoint)!
-      if (existingBrowser.isConnected()) {
-        return existingBrowser
-      } else {
-        this.connectionPool.delete(wsEndpoint)
-      }
-    }
-
-    const puppeteer = require('puppeteer-core')
-    const browser = await puppeteer.connect({
-      browserWSEndpoint: wsEndpoint,
-      defaultViewport: null
-    })
-
-    this.connectionPool.set(wsEndpoint, browser)
-    return browser
-  }
-
-  private async applyProfile(page: Page, profile: BrowserProfile): Promise<void> {
-    try {
-      // Set viewport
-      if (profile.viewport) {
-        await page.setViewport(profile.viewport)
-      }
-
-      // Set user agent
-      if (profile.userAgent) {
-        await page.setUserAgent(profile.userAgent)
-      }
-
-      // Set extra headers
-      await page.setExtraHTTPHeaders({
-        'Accept-Language': profile.locale || 'en-US,en;q=0.9'
-      })
-
-      // Set cookies
-      if (profile.cookies && profile.cookies.length > 0) {
-        await page.setCookie(...profile.cookies)
-      }
-
-      // Set localStorage and sessionStorage
-      if (profile.localStorage || profile.sessionStorage) {
-        await page.evaluateOnNewDocument((localStorage, sessionStorage) => {
-          if (localStorage) {
-            Object.entries(localStorage).forEach(([key, value]) => {
-              window.localStorage.setItem(key, value)
-            })
-          }
-          if (sessionStorage) {
-            Object.entries(sessionStorage).forEach(([key, value]) => {
-              window.sessionStorage.setItem(key, value)
-            })
-          }
-        }, profile.localStorage, profile.sessionStorage)
-      }
-
-      // Apply fingerprint spoofing
-      if (profile.fingerprint) {
-        await this.applyFingerprint(page, profile.fingerprint)
-      }
-
-    } catch (error) {
-      console.warn('Failed to apply some profile settings:', error)
-    }
-  }
-
-  private async applyFingerprint(page: Page, fingerprint: any): Promise<void> {
-    await page.evaluateOnNewDocument((fp) => {
-      // Override screen properties
-      if (fp.screen) {
-        Object.defineProperty(screen, 'width', { value: fp.screen.width })
-        Object.defineProperty(screen, 'height', { value: fp.screen.height })
-        Object.defineProperty(screen, 'colorDepth', { value: fp.screen.colorDepth })
-      }
-
-      // Override navigator properties
-      if (fp.languages) {
-        Object.defineProperty(navigator, 'languages', { value: fp.languages })
-      }
-
-      // Override plugins
-      if (fp.plugins) {
-        Object.defineProperty(navigator, 'plugins', { value: fp.plugins })
-      }
-
-      // Canvas fingerprint spoofing
-      if (fp.canvas) {
-        const originalToDataURL = HTMLCanvasElement.prototype.toDataURL
-        HTMLCanvasElement.prototype.toDataURL = function() {
-          return fp.canvas
-        }
-      }
-
-      // WebGL fingerprint spoofing
-      if (fp.webgl) {
-        const originalGetParameter = WebGLRenderingContext.prototype.getParameter
-        WebGLRenderingContext.prototype.getParameter = function(parameter) {
-          if (parameter === 37445) return fp.webgl // UNMASKED_VENDOR_WEBGL
-          if (parameter === 37446) return fp.webgl // UNMASKED_RENDERER_WEBGL
-          return originalGetParameter.call(this, parameter)
-        }
-      }
-    }, fingerprint)
-  }
-
   async terminateSession(sessionId: string): Promise<void> {
+    logger.info(`Attempting to terminate session: ${sessionId}`);
     const session = this.activeSessions.get(sessionId)
     if (!session) {
+      logger.warn(`Attempted to terminate non-existent session: ${sessionId}`);
       throw new Error(`Session ${sessionId} not found`)
     }
 
     try {
-      // Close page and browser
-      if (session.page) {
-        await session.page.close()
-      }
-      if (session.browser) {
-        await session.browser.disconnect()
-      }
-
-      // Terminate session via API
       await this.makeApiRequest('DELETE', `/sessions/${sessionId}`)
       
       session.status = 'completed'
@@ -315,12 +225,15 @@ export class BrowserbaseAdapter {
       }
 
       this.activeSessions.delete(sessionId)
+      this.updateMetrics(session)
       this.processQueue()
+      logger.info(`Session ${sessionId} terminated successfully.`);
 
-    } catch (error) {
+    } catch (error: any) {
       session.status = 'failed'
       session.error = error instanceof Error ? error.message : 'Termination failed'
       session.completedAt = new Date()
+      logger.error(`Error terminating session ${sessionId}: ${session.error}`);
       
       this.activeSessions.delete(sessionId)
       this.processQueue()
@@ -329,32 +242,44 @@ export class BrowserbaseAdapter {
     }
   }
 
-  async rotateProxy(sessionId: string, newProxy: ProxyConfig): Promise<void> {
-    const session = this.activeSessions.get(sessionId)
-    if (!session) {
-      throw new Error(`Session ${sessionId} not found`)
+  async getSession(sessionId: string): Promise<BrowserbaseSession | null> {
+    logger.debug(`Fetching session: ${sessionId}`);
+    const localSession = this.activeSessions.get(sessionId)
+    if (localSession) {
+      logger.debug(`Session ${sessionId} found in local cache.`);
+      return localSession
     }
 
     try {
-      await this.makeApiRequest('PUT', `/sessions/${sessionId}/proxy`, {
-        proxy: this.formatProxyConfig(newProxy)
-      })
-
-      session.metadata.proxy = newProxy
+      const response = await this.makeApiRequest('GET', `/sessions/${sessionId}`)
+      if (response.success) {
+        logger.debug(`Session ${sessionId} fetched from API.`);
+        return this.mapApiSessionToLocal(response.data)
+      }
     } catch (error) {
-      throw new Error(`Failed to rotate proxy for session ${sessionId}: ${error}`)
+      logger.error(`Failed to fetch session ${sessionId} from API:`, error);
     }
+
+    return null
   }
 
-  async getSession(sessionId: string): Promise<BrowserbaseSession | null> {
-    return this.activeSessions.get(sessionId) || null
-  }
+  async listSessions(limit = 50): Promise<BrowserbaseSession[]> {
+    logger.debug(`Listing sessions with limit: ${limit}`);
+    try {
+      const response = await this.makeApiRequest('GET', '/sessions', { limit })
+      if (response.success) {
+        logger.debug(`Successfully listed ${response.data.sessions.length} sessions.`);
+        return response.data.sessions.map((s: any) => this.mapApiSessionToLocal(s))
+      }
+    } catch (error) {
+      logger.error('Failed to list sessions from API:', error);
+    }
 
-  async listSessions(): Promise<BrowserbaseSession[]> {
-    return Array.from(this.activeSessions.values())
+    return []
   }
 
   async getUsage(): Promise<BrowserbaseUsage> {
+    logger.debug('Fetching Browserbase usage data.');
     try {
       const response = await this.makeApiRequest('GET', '/usage')
       if (response.success) {
@@ -369,51 +294,58 @@ export class BrowserbaseAdapter {
           bandwidthLimit: response.data.bandwidthLimit,
           resetDate: new Date(response.data.resetDate)
         }
+        logger.info('Browserbase usage data updated.', this.usage);
         return this.usage
       }
     } catch (error) {
-      console.error('Failed to fetch usage:', error)
+      logger.error('Failed to fetch usage from API:', error);
     }
 
     throw new Error('Unable to fetch usage information')
   }
 
+  getMetrics(): BrowserbaseMetrics {
+    logger.debug('Retrieving Browserbase metrics.');
+    return { ...this.metrics }
+  }
+
+  getActiveSessions(): BrowserbaseSession[] {
+    logger.debug('Retrieving active sessions.');
+    return Array.from(this.activeSessions.values())
+  }
+
+  getQueueLength(): number {
+    logger.debug('Retrieving session queue length.');
+    return this.sessionQueue.length
+  }
+
   async healthCheck(): Promise<{ healthy: boolean; latency?: number; error?: string }> {
+    logger.info('Performing Browserbase health check.');
     const startTime = Date.now()
     
     try {
       const response = await this.makeApiRequest('GET', '/health')
       const latency = Date.now() - startTime
       
+      if (response.success) {
+        logger.info(`Browserbase health check successful. Latency: ${latency}ms`);
+      } else {
+        logger.error(`Browserbase health check failed: ${response.error}`);
+      }
       return {
         healthy: response.success,
         latency,
         error: response.success ? undefined : response.error
       }
-    } catch (error) {
+    } catch (error: any) {
+      const latency = Date.now() - startTime;
+      logger.error(`Browserbase health check failed with exception: ${error.message}. Latency: ${latency}ms`);
       return {
         healthy: false,
-        latency: Date.now() - startTime,
+        latency,
         error: error instanceof Error ? error.message : 'Health check failed'
       }
     }
-  }
-
-  getActiveSessions(): BrowserbaseSession[] {
-    return Array.from(this.activeSessions.values())
-  }
-
-  getQueueLength(): number {
-    return this.sessionQueue.length
-  }
-
-  isAtCapacity(): boolean {
-    if (!this.usage) return false
-    
-    return (
-      this.usage.sessionsUsed >= this.usage.sessionsLimit * 0.9 ||
-      this.usage.minutesUsed >= this.usage.minutesLimit * 0.9
-    )
   }
 
   private async makeApiRequest(method: string, path: string, data?: any): Promise<any> {
@@ -430,27 +362,43 @@ export class BrowserbaseAdapter {
       ...(data && method !== 'GET' ? { body: JSON.stringify(data) } : {})
     }
 
+    logger.debug(`Making API request: ${method} ${url}`);
+
     // Add query parameters for GET requests
     if (method === 'GET' && data) {
       const params = new URLSearchParams(data)
       const finalUrl = `${url}?${params}`
-      const response = await fetch(finalUrl, options)
-      return this.handleApiResponse(response)
+      try {
+        const response = await fetch(finalUrl, options)
+        return this.handleApiResponse(response)
+      } catch (error) {
+        logger.error(`API request failed for ${method} ${finalUrl}:`, error);
+        throw error;
+      }
     }
 
-    const response = await fetch(url, options)
-    return this.handleApiResponse(response)
+    try {
+      const response = await fetch(url, options)
+      return this.handleApiResponse(response)
+    } catch (error) {
+      logger.error(`API request failed for ${method} ${url}:`, error);
+      throw error;
+    }
   }
 
   private async handleApiResponse(response: Response): Promise<any> {
-    const responseData = await response.json().catch(() => ({}))
+    const responseData = await response.json().catch(() => ({
+      error: 'Failed to parse response JSON'
+    }))
 
     if (response.ok) {
+      logger.debug(`API response successful for ${response.url}. Status: ${response.status}`);
       return {
         success: true,
         data: responseData
       }
     } else {
+      logger.error(`API response failed for ${response.url}. Status: ${response.status}, Error: ${responseData.error || response.statusText}`);
       return {
         success: false,
         error: responseData.error || `HTTP ${response.status}: ${response.statusText}`,
@@ -459,7 +407,11 @@ export class BrowserbaseAdapter {
     }
   }
 
-  private generateUserAgent(): string {
+  private generateUserAgent(profile?: BrowserProfile): string {
+    if (profile?.userAgent) {
+      return profile.userAgent
+    }
+
     const browsers = [
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -478,30 +430,85 @@ export class BrowserbaseAdapter {
     }
   }
 
+  private mapApiSessionToLocal(apiSession: any): BrowserbaseSession {
+    return {
+      id: apiSession.id,
+      status: apiSession.status,
+      browserWSEndpoint: apiSession.browserWSEndpoint,
+      debuggerUrl: apiSession.debuggerUrl,
+      recordingUrl: apiSession.recordingUrl,
+      createdAt: new Date(apiSession.createdAt),
+      startedAt: apiSession.startedAt ? new Date(apiSession.startedAt) : undefined,
+      completedAt: apiSession.completedAt ? new Date(apiSession.completedAt) : undefined,
+      duration: apiSession.duration,
+      error: apiSession.error,
+      metadata: apiSession.metadata || {}
+    }
+  }
+
   private monitorSession(session: BrowserbaseSession): void {
     const timeout = this.config.defaultTimeout!
+    logger.debug(`Monitoring session ${session.id} for timeout of ${timeout}ms.`);
     
     setTimeout(async () => {
       if (this.activeSessions.has(session.id) && session.status === 'running') {
+        logger.warn(`Session ${session.id} timed out. Attempting to terminate.`);
         try {
           await this.terminateSession(session.id)
         } catch (error) {
-          console.error(`Failed to terminate timed-out session ${session.id}:`, error)
+          logger.error(`Failed to terminate timed-out session ${session.id}:`, error);
         }
       }
     }, timeout)
+  }
+
+  private updateMetrics(session: BrowserbaseSession): void {
+    this.metrics.totalSessions++
+    
+    if (session.duration) {
+      this.metrics.totalMinutes += session.duration / (1000 * 60)
+      this.metrics.averageSessionDuration = this.metrics.totalMinutes / this.metrics.totalSessions
+    }
+
+    if (session.status === 'completed') {
+      this.metrics.successRate = (this.metrics.successRate * (this.metrics.totalSessions - 1) + 1) / this.metrics.totalSessions
+    } else if (session.status === 'failed') {
+      this.metrics.errorRate = (this.metrics.errorRate * (this.metrics.totalSessions - 1) + 1) / this.metrics.totalSessions
+    }
+
+    // Update region usage
+    if (session.metadata.region) {
+      const regions = [...this.metrics.mostUsedRegions]
+      const regionIndex = regions.indexOf(session.metadata.region)
+      if (regionIndex === -1) {
+        regions.push(session.metadata.region)
+      }
+      this.metrics.mostUsedRegions = regions.slice(0, 5) // Keep top 5
+    }
+
+    // Update peak usage hours
+    const hour = new Date().getHours()
+    if (!this.metrics.peakUsageHours.includes(hour)) {
+      this.metrics.peakUsageHours.push(hour)
+      this.metrics.peakUsageHours.sort((a, b) => a - b)
+      this.metrics.peakUsageHours = this.metrics.peakUsageHours.slice(0, 12) // Keep top 12 hours
+    }
+    logger.debug('Metrics updated:', this.metrics);
   }
 
   private startQueueProcessor(): void {
     if (this.isProcessingQueue) return
     
     this.isProcessingQueue = true
+    logger.info('Starting session queue processor.');
     this.processQueue()
   }
 
   private async processQueue(): Promise<void> {
+    logger.debug(`Processing queue. Current queue length: ${this.sessionQueue.length}, Active sessions: ${this.activeSessions.size}`);
     while (this.sessionQueue.length > 0 && this.activeSessions.size < this.config.maxConcurrentSessions!) {
       const { options, resolve, reject } = this.sessionQueue.shift()!
+      logger.info('Processing next session from queue.');
       
       try {
         const session = await this.createSessionInternal(options)
@@ -510,38 +517,31 @@ export class BrowserbaseAdapter {
         reject(error)
       }
     }
+    logger.debug('Queue processing finished.');
   }
 
   private startUsageMonitoring(): void {
+    logger.info('Starting usage monitoring.');
     // Update usage every 5 minutes
     setInterval(async () => {
       try {
         await this.getUsage()
       } catch (error) {
-        console.error('Failed to update usage:', error)
+        logger.error('Failed to update usage during monitoring:', error);
       }
     }, 5 * 60 * 1000)
   }
 
   async cleanup(): Promise<void> {
+    logger.info('Cleaning up BrowserbaseAdapter.');
     // Terminate all active sessions
     const terminationPromises = Array.from(this.activeSessions.keys()).map(sessionId =>
       this.terminateSession(sessionId).catch(error =>
-        console.error(`Failed to terminate session ${sessionId}:`, error)
+        logger.error(`Failed to terminate session ${sessionId} during cleanup:`, error)
       )
     )
 
     await Promise.all(terminationPromises)
-
-    // Close all browser connections
-    for (const browser of this.connectionPool.values()) {
-      try {
-        await browser.disconnect()
-      } catch (error) {
-        console.error('Failed to disconnect browser:', error)
-      }
-    }
-    this.connectionPool.clear()
 
     // Clear queue
     this.sessionQueue.forEach(({ reject }) => {
@@ -550,5 +550,206 @@ export class BrowserbaseAdapter {
     this.sessionQueue.length = 0
 
     this.isProcessingQueue = false
+    logger.info('BrowserbaseAdapter cleanup complete.');
+  }
+
+  // Advanced features
+
+  async createSessionWithRetry(
+    options: BrowserbaseSessionOptions,
+    maxRetries = 3,
+    retryDelay = 1000
+  ): Promise<BrowserbaseSession> {
+    logger.info(`Attempting to create session with retry. Max retries: ${maxRetries}`);
+    let lastError: Error | null = null
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        return await this.createSession(options)
+      } catch (error: any) {
+        lastError = error instanceof Error ? error : new Error('Unknown error')
+        logger.warn(`Session creation attempt ${attempt} failed. Error: ${lastError.message}`);
+        
+        if (attempt < maxRetries) {
+          logger.info(`Retrying in ${retryDelay * attempt}ms...`);
+          await new Promise(resolve => setTimeout(resolve, retryDelay * attempt))
+        }
+      }
+    }
+
+    logger.error(`All ${maxRetries} session creation attempts failed.`);
+    throw lastError || new Error('Max retries exceeded')
+  }
+
+  async createSessionPool(
+    count: number,
+    options: BrowserbaseSessionOptions = {}
+  ): Promise<BrowserbaseSession[]> {
+    logger.info(`Creating session pool with ${count} sessions.`);
+    const promises = Array.from({ length: count }, () => this.createSession(options))
+    const results = await Promise.allSettled(promises)
+    
+    const sessions: BrowserbaseSession[] = []
+    const errors: Error[] = []
+
+    results.forEach(result => {
+      if (result.status === 'fulfilled') {
+        sessions.push(result.value)
+      } else {
+        errors.push(result.reason)
+      }
+    })
+
+    if (errors.length > 0) {
+      logger.warn(`Failed to create ${errors.length} sessions in pool:`, errors);
+    }
+    logger.info(`Session pool creation complete. Created ${sessions.length} sessions.`);
+    return sessions
+  }
+
+  async rotateSession(sessionId: string, options: BrowserbaseSessionOptions = {}): Promise<BrowserbaseSession> {
+    logger.info(`Rotating session: ${sessionId}`);
+    // Terminate old session and create new one
+    await this.terminateSession(sessionId)
+    const newSession = await this.createSession(options);
+    logger.info(`Session ${sessionId} rotated successfully to new session ${newSession.id}.`);
+    return newSession;
+  }
+
+  isAtCapacity(): boolean {
+    if (!this.usage) return false
+    
+    const atCapacity = (
+      this.usage.sessionsUsed >= this.usage.sessionsLimit * 0.9 ||
+      this.usage.minutesUsed >= this.usage.minutesLimit * 0.9
+    );
+    logger.debug(`Checking if at capacity. Result: ${atCapacity}. Usage: ${JSON.stringify(this.usage)}`);
+    return atCapacity;
+  }
+
+  getRecommendedRegion(): string {
+    logger.debug('Getting recommended region.');
+    // Return the least used region or default
+    const regionUsage = this.metrics.mostUsedRegions
+    const allRegions = ['us-east-1', 'us-west-2', 'eu-west-1', 'ap-southeast-1']
+    
+    for (const region of allRegions) {
+      if (!regionUsage.includes(region)) {
+        logger.debug(`Recommended region: ${region} (least used).`);
+        return region
+      }
+    }
+    logger.debug('No least used region found. Defaulting to us-east-1.');
+    return 'us-east-1' // Default fallback
+  }
+
+  async createSessionWithPuppeteer(profile: BrowserProfile, proxyUrl?: string): Promise<Page> {
+    try {
+      const sessionResponse = await fetch(`${this.config.baseUrl}/sessions`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.config.apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          projectId: this.config.projectId,
+          profile: {
+            userAgent: profile.userAgent,
+            viewport: profile.viewport,
+            locale: profile.locale,
+            timezone: profile.timezone
+          },
+          proxy: proxyUrl ? { url: proxyUrl } : undefined
+        })
+      });
+
+      if (!sessionResponse.ok) {
+        throw new Error(`Failed to create Browserbase session: ${sessionResponse.statusText}`);
+      }
+
+      const sessionData = await sessionResponse.json();
+      const sessionId = sessionData.id;
+      const wsEndpoint = sessionData.wsEndpoint;
+
+      this.activeSessions.set(profile.id, sessionId);
+
+      // Connect to the remote browser
+      const browser = await Browser.connect({
+        browserWSEndpoint: wsEndpoint,
+        defaultViewport: profile.viewport
+      });
+
+      const page = await browser.newPage();
+      
+      // Apply profile settings
+      await this.applyProfileToPage(page, profile);
+
+      return page;
+    } catch (error) {
+      console.error('Browserbase session creation failed:', error);
+      throw error;
+    }
+  }
+
+  private async applyProfileToPage(page: Page, profile: BrowserProfile): Promise<void> {
+    // Set cookies
+    if (profile.cookies && profile.cookies.length > 0) {
+      await page.setCookie(...profile.cookies);
+    }
+
+    // Set localStorage and sessionStorage
+    if (profile.localStorage || profile.sessionStorage) {
+      await page.evaluateOnNewDocument((localStorage, sessionStorage) => {
+        if (localStorage) {
+          Object.entries(localStorage).forEach(([key, value]) => {
+            window.localStorage.setItem(key, value);
+          });
+        }
+        if (sessionStorage) {
+          Object.entries(sessionStorage).forEach(([key, value]) => {
+            window.sessionStorage.setItem(key, value);
+          });
+        }
+      }, profile.localStorage, profile.sessionStorage);
+    }
+  }
+
+  async closeSession(profileId: string): Promise<void> {
+    const sessionId = this.activeSessions.get(profileId);
+    if (!sessionId) return;
+
+    try {
+      await fetch(`${this.config.baseUrl}/sessions/${sessionId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${this.config.apiKey}`
+        }
+      });
+      
+      this.activeSessions.delete(profileId);
+    } catch (error) {
+      console.error('Failed to close Browserbase session:', error);
+    }
+  }
+
+  async getSessionStatus(profileId: string): Promise<string> {
+    const sessionId = this.activeSessions.get(profileId);
+    if (!sessionId) return 'not_found';
+
+    try {
+      const response = await fetch(`${this.config.baseUrl}/sessions/${sessionId}`, {
+        headers: {
+          'Authorization': `Bearer ${this.config.apiKey}`
+        }
+      });
+
+      if (!response.ok) return 'error';
+
+      const data = await response.json();
+      return data.status || 'unknown';
+    } catch (error) {
+      console.error('Failed to get session status:', error);
+      return 'error';
+    }
   }
 }
