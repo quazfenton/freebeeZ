@@ -296,6 +296,26 @@ export class ServiceDiscoveryEngine {
     for (const template of ADVANCED_SERVICE_TEMPLATES) {
       this.serviceTemplates.set(template.id, template)
     }
+
+    // Also load any generated templates from data/generated-templates.json if present
+    try {
+      const fs = require('fs') as typeof import('fs')
+      const path = require('path') as typeof import('path')
+      const generatedPath = path.join(process.cwd(), 'data', 'generated-templates.json')
+      if (fs.existsSync(generatedPath)) {
+        const raw = fs.readFileSync(generatedPath, 'utf8')
+        const generated = JSON.parse(raw)
+        if (Array.isArray(generated)) {
+          for (const template of generated) {
+            if (template && template.id && template.name) {
+              this.serviceTemplates.set(template.id, template)
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load generated templates:', e instanceof Error ? e.message : e)
+    }
   }
 
   async cleanup(): Promise<void> {

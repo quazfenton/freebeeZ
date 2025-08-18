@@ -430,16 +430,45 @@ export class BrowserbaseAdapter {
       ...(data && method !== 'GET' ? { body: JSON.stringify(data) } : {})
     }
 
-    // Add query parameters for GET requests
-    if (method === 'GET' && data) {
-      const params = new URLSearchParams(data)
-      const finalUrl = `${url}?${params}`
+    const doFetch = async (finalUrl: string) => {
+      const start = Date.now()
       const response = await fetch(finalUrl, options)
-      return this.handleApiResponse(response)
+      const latency = Date.now() - start
+      // Optionally track bandwidth/latency metrics per call
+      try {
+        // naive bandwidth estimation from content-length header
+        const clen = response.headers.get('content-length')
+        if (clen) {
+          // could persist to a metrics store if needed
+        }
+      } catch {}
+      const res = await this.handleApiResponse(response)
+      if (!res.success) {
+        ;(res as any).latency = latency
+      } else {
+        ;(res as any).latency = latency
+      }
+      return res
     }
 
-    const response = await fetch(url, options)
-    return this.handleApiResponse(response)
+    // Add query parameters for GET requests
+    const targetUrl = method === 'GET' && data ? `${url}?${new URLSearchParams(data)}` : url
+
+    // Retry with exponential backoff on transient errors
+    const maxRetries = 3
+    let attempt = 0
+    let lastErr: any
+    while (attempt <= maxRetries) {
+      try {
+        return await doFetch(targetUrl)
+      } catch (e) {
+        lastErr = e
+      }
+      attempt++
+      const backoff = Math.min(1000 * Math.pow(2, attempt), 8000)
+      await new Promise(r => setTimeout(r, backoff))
+    }
+    throw lastErr || new Error('Browserbase request failed after retries')
   }
 
   private async handleApiResponse(response: Response): Promise<any> {
@@ -451,9 +480,18 @@ export class BrowserbaseAdapter {
         data: responseData
       }
     } else {
+      // Map common failure modes to clearer errors
+      let errorMsg = responseData.error || `HTTP ${response.status}: ${response.statusText}`
+      if (response.status === 401 || response.status === 403) {
+        errorMsg = 'Authentication failed for Browserbase API. Check BROWSERBASE_API_KEY and permissions.'
+      } else if (response.status === 429) {
+        errorMsg = 'Browserbase rate limit reached. Consider reducing concurrency or increasing plan limits.'
+      } else if (response.status >= 500) {
+        errorMsg = `Browserbase service error (${response.status}). Please retry later.`
+      }
       return {
         success: false,
-        error: responseData.error || `HTTP ${response.status}: ${response.statusText}`,
+        error: errorMsg,
         status: response.status
       }
     }
