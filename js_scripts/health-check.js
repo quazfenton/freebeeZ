@@ -181,10 +181,10 @@ class HealthChecker {
       this.pass('Python Scripts Directory', 'Found')
       
       const requiredScripts = [
-        'playwright_automation.py',
+        'advanced_playwright_automation.py',
         'profile_generator.py',
         'captcha_detector.py',
-        'ai_captcha_solver.py',
+        'intelligent_captcha_solver.py',
         'email_link_extractor.py'
       ]
       

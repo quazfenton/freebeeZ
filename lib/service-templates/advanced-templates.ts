@@ -514,6 +514,65 @@ export const ADVANCED_SERVICE_TEMPLATES: ServiceTemplate[] = [
     features: ['App Hosting', 'Databases', 'Cron Jobs'],
     requiresEmailVerification: false,
     requiresPhoneVerification: false
+  },
+
+  // Frankenstein Cloud Storage - Unified Storage Solution
+  {
+    id: 'frankenstein-cloud-storage',
+    name: 'Frankenstein Cloud Storage',
+    category: ServiceCategory.COMPUTING_STORAGE,
+    baseUrl: 'https://github.com/freebeez/frankenstein-storage',
+    signupUrl: 'https://github.com/freebeez/frankenstein-storage#setup',
+    loginUrl: 'https://github.com/freebeez/frankenstein-storage#configuration',
+    description: 'Unifies multiple cloud storage services (Dropbox, Google Drive, MEGA) for aggregated space, search, and backup',
+    registrationSteps: [
+      {
+        type: 'manual',
+        description: 'Configure API tokens for each cloud storage service you want to integrate (Dropbox, Google Drive, MEGA)'
+      }
+    ],
+    credentialExtraction: {
+      customExtractor: async (page: any) => {
+        // This service is configured via tokens added manually to the system
+        return {
+          configured: true
+        }
+      }
+    },
+    limits: {
+      storageLimit: 0, // Combined limit from all integrated services
+      monthlyRequests: 100000
+    },
+    features: [
+      'Unified search across providers',
+      'Automatic backup rotation',
+      'Space usage rebalancing',
+      'Multi-provider file storage',
+      'Intelligent file distribution'
+    ],
+    requiresEmailVerification: false,
+    requiresPhoneVerification: false,
+    credentialFields: [
+      {
+        name: 'dropboxToken',
+        label: 'Dropbox API Token',
+        type: 'password',
+        required: false
+      },
+      {
+        name: 'googleDriveToken',
+        label: 'Google Drive API Token',
+        type: 'password',
+        required: false
+      },
+      {
+        name: 'megaSID',
+        label: 'MEGA Session ID',
+        type: 'password',
+        required: false
+      }
+    ],
+    tags: ['storage', 'backup', 'unification', 'multi-cloud', 'frankenstein']
   }
 ]
 

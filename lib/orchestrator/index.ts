@@ -2,6 +2,8 @@ import { ServiceRegistry } from '../service-registry';
 import { QueueService, AutomationJobData } from '../queue';
 import { AutomationTask, AutomationResult } from '../browser-automation';
 import { ServiceIntegration, ServiceConfig } from '../service-integrations';
+import { CaptchaManager } from '../captcha-solver';
+import { NotificationManager } from '../notification';
 import winston from 'winston';
 
 const logger = winston.createLogger({
@@ -18,10 +20,12 @@ const logger = winston.createLogger({
 export class Orchestrator {
   private serviceRegistry: ServiceRegistry;
   private queueService: QueueService;
+  private captchaManager?: CaptchaManager;
 
-  constructor(serviceRegistry: ServiceRegistry, queueService: QueueService) {
+  constructor(serviceRegistry: ServiceRegistry, queueService: QueueService, captchaManager?: CaptchaManager) {
     this.serviceRegistry = serviceRegistry;
     this.queueService = queueService;
+    this.captchaManager = captchaManager;
     logger.info('Orchestrator initialized.');
   }
 

@@ -19,6 +19,9 @@ export default function HomePage() {
             <Link href="/services" className="text-sm font-medium hover:underline underline-offset-4">
               Services
             </Link>
+            <Link href="/cloud-storage" className="text-sm font-medium hover:underline underline-offset-4">
+              Cloud Storage
+            </Link>
             <Link href="/automations" className="text-sm font-medium hover:underline underline-offset-4">
               Automations
             </Link>

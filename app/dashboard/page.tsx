@@ -219,6 +219,9 @@ export default function DashboardPage() {
             <Link href="/services" className="text-sm font-medium hover:underline underline-offset-4">
               Services
             </Link>
+            <Link href="/cloud-storage" className="text-sm font-medium hover:underline underline-offset-4">
+              Cloud Storage
+            </Link>
             <Link href="/automations" className="text-sm font-medium hover:underline underline-offset-4">
               Automations
             </Link>
@@ -344,6 +347,21 @@ export default function DashboardPage() {
                         </Button>
                       )
                     })}
+                    {/* Frankenstein Storage Quick Action */}
+                    <Link href="/cloud-storage">
+                      <Button
+                        variant="outline"
+                        className="h-auto p-4 flex flex-col items-start space-y-2 hover:bg-accent transition-colors"
+                      >
+                        <div className="flex items-center space-x-2">
+                          <Cloud className="h-5 w-5" />
+                          <span className="font-medium">Frankenstein Storage</span>
+                        </div>
+                        <p className="text-sm text-muted-foreground text-left">
+                          Manage unified cloud storage from multiple providers
+                        </p>
+                      </Button>
+                    </Link>
                   </div>
                 </CardContent>
               </Card>

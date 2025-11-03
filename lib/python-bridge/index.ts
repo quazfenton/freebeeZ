@@ -116,7 +116,7 @@ export class PythonBridge {
 
   async runPlaywrightAutomation(config: PlaywrightAutomationConfig): Promise<PythonScriptResult> {
     const scriptConfig: PythonScriptConfig = {
-      script: 'playwright_automation.py',
+      script: 'advanced_playwright_automation.py',
       args: [JSON.stringify(config)],
       timeout: config.timeout || 120000
     }
@@ -124,19 +124,9 @@ export class PythonBridge {
     return await this.runScript(scriptConfig)
   }
 
-  async runWebCrawler(config: CrawlingConfig): Promise<PythonScriptResult> {
-    const scriptConfig: PythonScriptConfig = {
-      script: 'web_crawler.py',
-      args: [JSON.stringify(config)],
-      timeout: 300000 // 5 minutes for crawling
-    }
-
-    return await this.runScript(scriptConfig)
-  }
-
   async solveCaptchaWithAI(imageBase64: string, captchaType: string): Promise<PythonScriptResult> {
     const scriptConfig: PythonScriptConfig = {
-      script: 'ai_captcha_solver.py',
+      script: 'intelligent_captcha_solver.py',
       args: [imageBase64, captchaType],
       timeout: 30000
     }
@@ -168,54 +158,6 @@ export class PythonBridge {
       script: 'email_link_extractor.py',
       args: [emailContent],
       timeout: 5000
-    }
-
-    return await this.runScript(scriptConfig)
-  }
-
-  async analyzeServiceRegistrationForm(pageHtml: string): Promise<PythonScriptResult> {
-    const scriptConfig: PythonScriptConfig = {
-      script: 'form_analyzer.py',
-      args: [pageHtml],
-      timeout: 10000
-    }
-
-    return await this.runScript(scriptConfig)
-  }
-
-  async generateServiceCredentials(serviceType: string, requirements: any): Promise<PythonScriptResult> {
-    const scriptConfig: PythonScriptConfig = {
-      script: 'credential_generator.py',
-      args: [serviceType, JSON.stringify(requirements)],
-      timeout: 5000
-    }
-
-    return await this.runScript(scriptConfig)
-  }
-
-  async monitorServiceHealth(serviceUrl: string, checkType: string): Promise<PythonScriptResult> {
-    const scriptConfig: PythonScriptConfig = {
-      script: 'service_monitor.py',
-      args: [serviceUrl, checkType],
-      timeout: 30000
-    }
-
-    return await this.runScript(scriptConfig)
-  }
-
-  async rotateUserAgent(): Promise<PythonScriptResult> {
-    const scriptConfig: PythonScriptConfig = {
-      script: 'user_agent_rotator.py',
-      timeout: 2000
-    }
-
-    return await this.runScript(scriptConfig)
-  }
-
-  async generateProxyList(): Promise<PythonScriptResult> {
-    const scriptConfig: PythonScriptConfig = {
-      script: 'proxy_generator.py',
-      timeout: 30000
     }
 
     return await this.runScript(scriptConfig)
@@ -373,76 +315,6 @@ export class PythonBridge {
         OPENAI_API_KEY: process.env.OPENAI_API_KEY || '',
         ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || ''
       }
-    }
-
-    return await this.runScript(scriptConfig)
-  }
-
-  async runProfileConsistencyChecker(profileData: any): Promise<PythonScriptResult> {
-    const scriptConfig: PythonScriptConfig = {
-      script: 'profile_consistency_checker.py',
-      args: [JSON.stringify(profileData)],
-      timeout: 15000
-    }
-
-    return await this.runScript(scriptConfig)
-  }
-
-  async runServiceHealthMonitor(services: string[]): Promise<PythonScriptResult> {
-    const scriptConfig: PythonScriptConfig = {
-      script: 'service_health_monitor.py',
-      args: [JSON.stringify(services)],
-      timeout: 60000
-    }
-
-    return await this.runScript(scriptConfig)
-  }
-
-  async runProxyValidator(proxyList: any[]): Promise<PythonScriptResult> {
-    const scriptConfig: PythonScriptConfig = {
-      script: 'proxy_validator.py',
-      args: [JSON.stringify(proxyList)],
-      timeout: 120000
-    }
-
-    return await this.runScript(scriptConfig)
-  }
-
-  async runEmailVerificationExtractor(emailContent: string, serviceType: string): Promise<PythonScriptResult> {
-    const scriptConfig: PythonScriptConfig = {
-      script: 'advanced_email_extractor.py',
-      args: [emailContent, serviceType],
-      timeout: 10000
-    }
-
-    return await this.runScript(scriptConfig)
-  }
-
-  async runBehaviorAnalyzer(sessionData: any): Promise<PythonScriptResult> {
-    const scriptConfig: PythonScriptConfig = {
-      script: 'behavior_analyzer.py',
-      args: [JSON.stringify(sessionData)],
-      timeout: 30000
-    }
-
-    return await this.runScript(scriptConfig)
-  }
-
-  async runServiceDependencyAnalyzer(services: string[]): Promise<PythonScriptResult> {
-    const scriptConfig: PythonScriptConfig = {
-      script: 'service_dependency_analyzer.py',
-      args: [JSON.stringify(services)],
-      timeout: 45000
-    }
-
-    return await this.runScript(scriptConfig)
-  }
-
-  async runAIQuotaPredictor(usageData: any): Promise<PythonScriptResult> {
-    const scriptConfig: PythonScriptConfig = {
-      script: 'ai_quota_predictor.py',
-      args: [JSON.stringify(usageData)],
-      timeout: 20000
     }
 
     return await this.runScript(scriptConfig)

@@ -1,3 +1,4 @@
+#***-------##-FINISHED-##--------*** 
  [ ~/freebeez  ,  project context in README.md (ie. direction/implementation in README may change or lack parts of initial idea) ; if u want, instead of excess token-use to elaborate in this chat, u can maximize utility of tokens while reading by noting your findings of project's actions/modules/states/params/flows/references /main  methodologies. into empty file '0812PLAN.md' (notes can be written as plan and returned to later to reiterate steps/outsource context, so dont sacrifice quality or # tokens for speed or finishing -can break tasks into any many better considered steps ). 
 
 Traverse all+ analyze files of subfolders (some may be separate projects / loosely similar scripts, but may or may not be compatible. If divergent/different use case for a subfolder, make a note but don't  delete or edit file to be kept separate ) . ]

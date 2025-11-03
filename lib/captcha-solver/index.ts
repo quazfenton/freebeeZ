@@ -1,6 +1,7 @@
 // CAPTCHA Solving System for FreebeeZ
 import axios from 'axios'
 import { Page } from 'puppeteer-core';
+import { NotificationManager } from '../notification';
 
 export interface CaptchaConfig {
   provider: '2captcha' | 'anticaptcha' | 'deathbycaptcha';
@@ -764,6 +765,11 @@ export class IntelligentCaptchaSolver extends CaptchaSolver {
 export class CaptchaManager {
   private solvers: Map<string, CaptchaSolver> = new Map();
   private defaultSolver: string | null = null;
+  private notificationManager: NotificationManager;
+
+  constructor(notificationManager: NotificationManager) {
+    this.notificationManager = notificationManager;
+  }
 
   addSolver(name: string, solver: CaptchaSolver, isDefault = false): void {
     this.solvers.set(name, solver);
@@ -804,17 +810,14 @@ export class CaptchaManager {
 
   async requestManualCaptchaSolve(task: CaptchaTask): Promise<void> {
     console.warn(`Automated CAPTCHA solving failed for task ${task.id}. Requesting manual intervention.`);
-    // In a real application, this would trigger a notification to the user (e.g., email, push notification, or UI alert).
-    // For now, we'll just log it.
-    console.log(`Manual CAPTCHA solve requested for:`);
-    console.log(`  Type: ${task.type}`);
-    console.log(`  Page URL: ${task.pageUrl}`);
-    if (task.imageBase64) {
-      console.log(`  Image (base64): ${task.imageBase64.substring(0, 50)}...`);
+    
+    // Use the notification manager to send proper notifications
+    const success = await this.notificationManager.requestManualCaptchaSolve(task, task.imageBase64);
+    
+    if (success) {
+      console.log(`Manual CAPTCHA solve notification sent for task ${task.id}`);
+    } else {
+      console.error(`Failed to send manual CAPTCHA solve notification for task ${task.id}`);
     }
-    if (task.question) {
-      console.log(`  Question: ${task.question}`);
-    }
-    // You might want to store the task in a database for the user to solve later.
   }
 }

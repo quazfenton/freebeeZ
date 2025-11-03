@@ -19,6 +19,7 @@ import {
 import { DashboardHeader } from "@/components/dashboard-header"
 import { DashboardShell } from "@/components/dashboard-shell"
 import { ServiceCard } from "@/components/service-card"
+import { FrankensteinServiceCard } from "@/components/frankenstein-service-card"
 
 export default function ServicesPage() {
   return (
@@ -101,6 +102,13 @@ export default function ServicesPage() {
                 status="warning"
                 usagePercent={95}
                 lastUsed="1 hour ago"
+              />
+              {/* Frankenstein Cloud Storage Card */}
+              <FrankensteinServiceCard
+                status="connected"
+                totalUsed={25}
+                totalSpace={50}
+                connectedProviders={3}
               />
             </div>
             <h2 className="text-xl font-bold tracking-tight mt-8">Recommended Services</h2>

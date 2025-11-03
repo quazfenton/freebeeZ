@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "test": "jest",
-    "check:health": "node scripts/health-check.js",
+    "check:health": "node js_scripts/health-check.js",
     "test:service": "jest --testPathPattern=service-integrations",
     "test:automation": "jest --testPathPattern=browser-automation"
   },

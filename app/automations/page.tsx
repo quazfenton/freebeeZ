@@ -1,9 +1,9 @@
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
+import Link from \"next/link\"
+import { Button } from \"@/components/ui/button\"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ArrowRight, Filter, Plus, Search, Settings, Zap } from "lucide-react"
+import { ArrowRight, Cloud, Filter, Plus, Search, Settings, Zap } from "lucide-react"
 import { DashboardHeader } from "@/components/dashboard-header"
 import { DashboardShell } from "@/components/dashboard-shell"
 import { AutomationCard } from "@/components/automation-card"
@@ -90,6 +90,28 @@ export default function AutomationsPage() {
                     Create
                     <ArrowRight className="ml-2 h-4 w-4" />
                   </Button>
+                </CardFooter>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Cloud className="h-5 w-5" />
+                    Frankenstein Storage Manager
+                  </CardTitle>
+                  <CardDescription>Computing & Storage</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground">
+                    Unified management of multiple cloud storage providers with automatic backup and space optimization.
+                  </p>
+                </CardContent>
+                <CardFooter>
+                  <Link href="/cloud-storage">
+                    <Button variant="outline" className="w-full">
+                      Configure
+                      <ArrowRight className="ml-2 h-4 w-4" />
+                    </Button>
+                  </Link>
                 </CardFooter>
               </Card>
               <Card>
@@ -195,6 +217,28 @@ export default function AutomationsPage() {
                     Use Template
                     <ArrowRight className="ml-2 h-4 w-4" />
                   </Button>
+                </CardFooter>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Cloud className="h-5 w-5" />
+                    Frankenstein Storage Template
+                  </CardTitle>
+                  <CardDescription>Computing & Storage</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground">
+                    Pre-configured automation for unified cloud storage management across providers.
+                  </p>
+                </CardContent>
+                <CardFooter>
+                  <Link href="/cloud-storage">
+                    <Button variant="outline" className="w-full">
+                      Use Template
+                      <ArrowRight className="ml-2 h-4 w-4" />
+                    </Button>
+                  </Link>
                 </CardFooter>
               </Card>
               <Card>
