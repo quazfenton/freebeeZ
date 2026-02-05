@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { FreeService, AggregationSourceConfig } from './types'
+import { FreeService, AggregationSourceConfig } from '../types'
 
 // Simple parser for GitHub markdown lists: finds lines with [name](url)
 export async function fetchGitHubMarkdownList(source: AggregationSourceConfig): Promise<FreeService[]> {

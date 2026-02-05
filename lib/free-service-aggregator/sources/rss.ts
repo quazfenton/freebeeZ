@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { FreeService, AggregationSourceConfig } from './types'
+import { FreeService, AggregationSourceConfig } from '../types'
 
 // Naive RSS/Atom extraction using regex for links and titles
 export async function fetchRss(source: AggregationSourceConfig): Promise<FreeService[]> {

@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { FreeService, AggregationSourceConfig } from './types'
+import { FreeService, AggregationSourceConfig } from '../types'
 
 // Minimal HTML anchor extraction (no cheerio to keep deps small)
 export async function fetchWebPageLinks(source: AggregationSourceConfig): Promise<FreeService[]> {
