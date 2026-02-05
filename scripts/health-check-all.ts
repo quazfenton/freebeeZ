@@ -9,6 +9,7 @@ import { AccountManager } from '../lib/account-manager';
 import { ProxyRotationSystem } from '../lib/proxy-rotation-system';
 import { CaptchaManager } from '../lib/captcha-solver';
 import { SessionVault } from '../lib/session-vault';
+import { QueueService } from '../lib/queue';
 
 async function runHealthChecks() {
   console.log('Starting comprehensive system health checks...\n');
@@ -113,8 +114,13 @@ async function runHealthChecks() {
     // Check Session Vault
     console.log('Checking Session Vault...');
     try {
+      const encryptionKey = process.env.ENCRYPTION_KEY;
+      if (!encryptionKey) {
+        throw new Error('ENCRYPTION_KEY environment variable is required for session encryption');
+      }
+      
       const sessionVault = new SessionVault({
-        encryptionKey: process.env.ENCRYPTION_KEY || 'default-test-key-32-chars-long!!',
+        encryptionKey,
         maxSessions: 100,
         sessionTimeout: 24 * 60 * 60 * 1000 // 24 hours
       });
@@ -136,7 +142,10 @@ async function runHealthChecks() {
     // Check Orchestrator
     console.log('Checking Orchestrator...');
     try {
-      const orchestrator = new Orchestrator();
+      const registry = new ServiceRegistry();
+      await registry.initialize();
+      const queueService = new QueueService(process.env.REDIS_URL || 'redis://localhost:6379');
+      const orchestrator = new Orchestrator(registry, queueService);
       await orchestrator.initialize();
       results.orchestrator = {
         status: 'OK',

@@ -7,8 +7,13 @@ let sessionVault: SessionVault | null = null
 
 function getSessionVault(): SessionVault {
   if (!sessionVault) {
+    const encryptionKey = process.env.ENCRYPTION_KEY
+    if (!encryptionKey) {
+      throw new Error('ENCRYPTION_KEY environment variable is required for session encryption')
+    }
+    
     sessionVault = new SessionVault({
-      encryptionKey: process.env.ENCRYPTION_KEY || 'default-test-key-32-chars-long!!',
+      encryptionKey,
       maxSessions: 1000,
       sessionTimeout: 24 * 60 * 60 * 1000, // 24 hours
     })

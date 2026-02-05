@@ -243,10 +243,13 @@ export class EmailAdapter implements ConnectionAdapter {
   }
 
   private async fetchUnreadMessages(imapClient: ImapClient, folder: string, limit: number): Promise<EmailMessage[]> {
-    const messages = await imapClient.listMessages(folder, '1:*', ['uid', 'flags', 'envelope', 'body[]'], { flag: '\\Seen' })
-    
+    const messages = await imapClient.listMessages(folder, '1:*', ['uid', 'flags', 'envelope', 'body[]'])
+
+    // Filter for unread messages (those without the \\Seen flag)
+    const unreadMessages = messages.filter(msg => !msg.flags.includes('\\Seen'))
+
     // Sort by date descending and limit
-    const sortedMessages = messages.sort((a, b) => {
+    const sortedMessages = unreadMessages.sort((a, b) => {
       const dateA = new Date(a.envelope.date).getTime()
       const dateB = new Date(b.envelope.date).getTime()
       return dateB - dateA

@@ -85,11 +85,14 @@ export class SessionVault {
       return null
     }
 
-    // Decrypt cookies before returning
+    // Decrypt cookies before returning, but don't mutate the cached session
     const decryptedCookies = this.cookieStore.decryptCookies(session.cookies as EncryptedCookie[])
-    session.cookies = decryptedCookies
-
-    return session
+    
+    // Return a copy of the session with decrypted cookies
+    return {
+      ...session,
+      cookies: decryptedCookies
+    }
   }
 
   /**

@@ -2,13 +2,33 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Orchestrator } from '@/lib/orchestrator'
 import { ServiceRegistry } from '@/lib/service-registry'
+import { QueueService } from '@/lib/queue'
 
-// Global instance to maintain state
+// Global instances to maintain state
 let orchestrator: Orchestrator | null = null
+let serviceRegistry: ServiceRegistry | null = null
+let queueService: QueueService | null = null
+
+function getServiceRegistry(): ServiceRegistry {
+  if (!serviceRegistry) {
+    serviceRegistry = new ServiceRegistry()
+  }
+  return serviceRegistry
+}
+
+function getQueueService(): QueueService {
+  if (!queueService) {
+    const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379'
+    queueService = new QueueService(redisUrl)
+  }
+  return queueService
+}
 
 function getOrchestrator(): Orchestrator {
   if (!orchestrator) {
-    orchestrator = new Orchestrator()
+    const registry = getServiceRegistry()
+    const queue = getQueueService()
+    orchestrator = new Orchestrator(registry, queue)
   }
   return orchestrator
 }

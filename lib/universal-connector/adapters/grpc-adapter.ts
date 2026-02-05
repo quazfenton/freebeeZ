@@ -61,10 +61,12 @@ export class GrpcAdapter implements ConnectionAdapter {
         throw new Error(`Service ${config.serviceName} not found in proto file`)
       }
 
-      // Create credentials
-      const credentials = config.ssl 
-        ? grpc.credentials.createSsl()
-        : grpc.credentials.createInsecure()
+      // Create credentials - prioritize provided credentials, fall back to SSL/insecure
+      const credentials = config.credentials || (
+        config.ssl
+          ? grpc.credentials.createSsl()
+          : grpc.credentials.createInsecure()
+      )
 
       // Create the client
       const client = new serviceConstructor(
@@ -85,7 +87,7 @@ export class GrpcAdapter implements ConnectionAdapter {
         method: ConnectionMethodType.GRPC,
         status: 'connected',
         config,
-        credentials: config.credentials,
+        credentials: { apiKey: config.credentials ? '[custom-grpc-credentials]' : undefined },
         capabilities: this.getCapabilities(),
         usage: this.usage.get(connectionId)!,
         healthCheck: () => this.healthCheck({ id: connectionId } as ServiceConnection),
