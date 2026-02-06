@@ -469,26 +469,17 @@ private startCleanupInterval(): void {
     this.cleanupIntervalId = setInterval(() => {
       const now = new Date()
       for (const account of this.accounts.values()) {
-        if (account.expiresAt && account.expiresAt < now) {
-          account.status = AccountStatus.EXPIRED
-        }
-        this.resetRateLimitsIfNeeded(account)
-      }
-    }, 60000)
-  }
-    setInterval(() => {
-      for (const account of this.accounts.values()) {
         this.resetRateLimitsIfNeeded(account)
 
         if (account.status === AccountStatus.RATE_LIMITED && !this.isRateLimited(account)) {
           account.status = AccountStatus.ACTIVE
         }
 
-        if (account.expiresAt && account.expiresAt < new Date()) {
+        if (account.expiresAt && account.expiresAt < now) {
           account.status = AccountStatus.EXPIRED
         }
       }
-    }, 60 * 1000)
+    }, 60_000)
   }
 
   cleanup(): void {
