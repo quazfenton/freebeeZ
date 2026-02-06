@@ -192,9 +192,14 @@ export class AccountManager {
     }
   }
 
-  private selectRoundRobin(pool: AccountPool, accounts: ServiceAccount[]): ServiceAccount {
-    pool.currentAccountIndex = (pool.currentAccountIndex + 1) % accounts.length
-    return accounts[pool.currentAccountIndex]
+private selectRoundRobin(pool: AccountPool, accounts: ServiceAccount[]): ServiceAccount {
+    const activeIds = new Set(accounts.map(a => a.id))
+    for (let i = 0; i < pool.accounts.length; i++) {
+      pool.roundRobinIndex = ((pool.roundRobinIndex ?? -1) + 1) % pool.accounts.length
+      const id = pool.accounts[pool.roundRobinIndex]
+      if (activeIds.has(id)) return this.accounts.get(id)!
+    }
+    return accounts[0]
   }
 
   private selectLeastUsed(accounts: ServiceAccount[]): ServiceAccount {
