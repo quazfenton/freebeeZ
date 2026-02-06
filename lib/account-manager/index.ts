@@ -465,7 +465,17 @@ export class AccountManager {
     }
   }
 
-  private startCleanupInterval(): void {
+private startCleanupInterval(): void {
+    this.cleanupIntervalId = setInterval(() => {
+      const now = new Date()
+      for (const account of this.accounts.values()) {
+        if (account.expiresAt && account.expiresAt < now) {
+          account.status = AccountStatus.EXPIRED
+        }
+        this.resetRateLimitsIfNeeded(account)
+      }
+    }, 60000)
+  }
     setInterval(() => {
       for (const account of this.accounts.values()) {
         this.resetRateLimitsIfNeeded(account)
