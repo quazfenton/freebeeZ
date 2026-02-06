@@ -7,30 +7,22 @@ import path from 'path';
 import { FreeServiceAggregator } from '../lib/free-service-aggregator';
 
 async function populateServices() {
-  console.log('Starting service population...');
+  console.log('▶️  Starting service population...');
   
+  const aggregator = new FreeServiceAggregator();
   try {
-    // Initialize the aggregator
-    const aggregator = new FreeServiceAggregator();
-    
-    // Run the aggregation process
-    const services = await aggregator.aggregateAll();
-    
-    console.log(`Found ${services.length} services`);
-    
-    // Write to data/free-services.json
+    const stats = await aggregator.aggregateFromAllSources();
+    const catalog = await aggregator.loadCatalog();
     const outputPath = path.join(process.cwd(), 'data', 'free-services.json');
-    await fs.writeFile(outputPath, JSON.stringify(services, null, 2));
-    
-    console.log(`Services successfully written to ${outputPath}`);
-    console.log(`Total services: ${services.length}`);
-    
-    // Print some statistics
-    const sources = [...new Set(services.map(s => s.source))];
-    console.log(`Sources: ${sources.join(', ')}`);
-    
+
+    await fs.mkdir(path.dirname(outputPath), { recursive: true });
+    await fs.writeFile(outputPath, JSON.stringify(catalog, null, 2), 'utf8');
+
+    console.log(`✔️  Aggregated ${catalog.length} services (${stats.newServices} new, ${stats.updatedServices} updated) from ${stats.successfulSources} sources.`);
+    console.log(`Saved catalog to ${outputPath}`);
+    console.log(`Sources processed: ${Object.keys(stats.bySource).length} (${Object.keys(stats.bySource).join(', ')})`);
   } catch (error) {
-    console.error('Error populating services:', error);
+    console.error('❌ Error populating services:', error instanceof Error ? error.message : error);
     process.exit(1);
   }
 }

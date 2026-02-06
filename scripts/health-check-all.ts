@@ -14,17 +14,20 @@ import { QueueService } from '../lib/queue';
 async function runHealthChecks() {
   console.log('Starting comprehensive system health checks...\n');
   
-  const results: { [key: string]: { status: string, message: string } } = {};
+  const results: { [key: string]: { status: string; message: string } } = {};
   
   try {
-    // Check Free Service Aggregator
     console.log('Checking Free Service Aggregator...');
     try {
       const aggregator = new FreeServiceAggregator();
-      const services = await aggregator.aggregateAll();
+      const catalog = await aggregator.loadCatalog();
+      if (!catalog.length) {
+        throw new Error('Catalog is empty; run scripts/update-free-services.ts first.');
+      }
+
       results.aggregator = {
         status: 'OK',
-        message: `Found ${services.length} services`
+        message: `Loaded ${catalog.length} aggregated services`
       };
       console.log('✅ Free Service Aggregator: OK');
     } catch (error) {
@@ -32,10 +35,9 @@ async function runHealthChecks() {
         status: 'ERROR',
         message: (error as Error).message
       };
-      console.log('❌ Free Service Aggregator: FAILED');
+      console.log('❌ Free Service Catalog: FAILED');
     }
     
-    // Check Service Registry
     console.log('Checking Service Registry...');
     try {
       const registry = new ServiceRegistry();
@@ -54,7 +56,6 @@ async function runHealthChecks() {
       console.log('❌ Service Registry: FAILED');
     }
     
-    // Check Account Manager
     console.log('Checking Account Manager...');
     try {
       const accountManager = new AccountManager();
@@ -73,7 +74,6 @@ async function runHealthChecks() {
       console.log('❌ Account Manager: FAILED');
     }
     
-    // Check Proxy Rotation System
     console.log('Checking Proxy Rotation System...');
     try {
       const proxySystem = new ProxyRotationSystem();
@@ -92,7 +92,6 @@ async function runHealthChecks() {
       console.log('❌ Proxy Rotation System: FAILED');
     }
     
-    // Check CAPTCHA Manager
     console.log('Checking CAPTCHA Manager...');
     try {
       const captchaManager = new CaptchaManager();
@@ -111,7 +110,6 @@ async function runHealthChecks() {
       console.log('❌ CAPTCHA Manager: FAILED');
     }
     
-    // Check Session Vault
     console.log('Checking Session Vault...');
     try {
       const encryptionKey = process.env.ENCRYPTION_KEY;
@@ -139,7 +137,6 @@ async function runHealthChecks() {
       console.log('❌ Session Vault: FAILED');
     }
     
-    // Check Orchestrator
     console.log('Checking Orchestrator...');
     try {
       const registry = new ServiceRegistry();
@@ -160,7 +157,6 @@ async function runHealthChecks() {
       console.log('❌ Orchestrator: FAILED');
     }
     
-    // Print summary
     console.log('\n--- HEALTH CHECK SUMMARY ---');
     let overallStatus = 'HEALTHY';
     
@@ -175,7 +171,6 @@ async function runHealthChecks() {
     
     console.log(`\nOverall Status: ${overallStatus}`);
     
-    // Exit with appropriate code
     if (overallStatus === 'UNHEALTHY') {
       process.exit(1);
     }
