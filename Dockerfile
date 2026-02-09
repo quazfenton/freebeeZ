@@ -1,0 +1,36 @@
+FROM node:20-alpine AS base
+
+# Install Python for automation scripts
+RUN apk add --no-cache python3 py3-pip py3-virtualenv
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+RUN npm ci
+
+# Copy Python requirements
+COPY requirements.txt ./
+RUN python3 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Install Playwright browsers for Python
+RUN playwright install chromium
+
+# Copy application code
+COPY . .
+
+# Build Next.js app
+RUN npm run build
+
+# Environment variables
+ENV NODE_ENV=production
+ENV PORT=3000
+ENV PYTHONUNBUFFERED=1
+
+# Expose port
+EXPOSE 3000
+
+# Run Next.js
+CMD ["npm", "start"]

@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-change-me-in-production}
+      - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
+    volumes:
+      - automation_data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Redis for queue management (optional)
+  redis:
+    image: redis:7-alpine
+    profiles:
+      - queue
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+volumes:
+  automation_data:
+  redis_data:
