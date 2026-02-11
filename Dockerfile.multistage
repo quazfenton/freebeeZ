@@ -1,0 +1,67 @@
+# Multi-stage build: Python stage for Python dependencies
+FROM python:3.11-slim AS python-deps
+
+# Install system dependencies for Python packages
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    gfortran \
+    build-essential \
+    libopenblas-dev \
+    liblapack-dev \
+    libfreetype6-dev \
+    pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy Python requirements and install Python dependencies
+COPY requirements.txt ./
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+RUN pip install --no-cache-dir --upgrade pip
+RUN pip install --no-cache-dir -r requirements.txt
+RUN playwright install chromium
+
+# Node.js stage for frontend
+FROM node:20-slim AS node-build
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+RUN npm ci
+
+# Copy application code
+COPY . .
+
+# Build Next.js app
+RUN npm run build
+
+# Production stage: Combine both environments
+FROM python:3.11-slim
+
+# Install Node.js
+RUN apt-get update && apt-get install -y \
+    nodejs \
+    npm \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy Python virtual environment from python-deps stage
+COPY --from=python-deps /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Copy built Next.js app from node-build stage
+WORKDIR /app
+COPY --from=node-build /app .
+
+# Environment variables
+ENV NODE_ENV=production
+ENV PORT=3000
+ENV PYTHONUNBUFFERED=1
+
+# Expose port
+EXPOSE 3000
+
+# Run Next.js
+CMD ["npm", "start"]

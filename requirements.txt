@@ -1,6 +1,6 @@
 # FreebeeZ Python Dependencies
 # Core automation and web scraping
-playwright==1.45.2
+playwright>=1.40.0
 selenium==4.15.2
 requests==2.32.3
 httpx==0.25.2
@@ -37,7 +37,7 @@ imapclient==2.3.1
 twilio==9.0.2
 
 # Encryption and security
-cryptography==41.0.8
+cryptography>=41.0.0
 bcrypt==4.1.2
 
 # Async and concurrency

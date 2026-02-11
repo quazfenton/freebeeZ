@@ -1,4 +1,4 @@
-import Queue, { Job } from 'bull';
+import { Queue, Worker, Job } from 'bullmq';
 import { AutomationTask } from '../browser-automation';
 
 export interface AutomationJobData {
@@ -6,21 +6,33 @@ export interface AutomationJobData {
 }
 
 export class QueueService {
-  private automationQueue: Queue.Queue<AutomationJobData>;
+  private automationQueue: Queue<AutomationJobData>;
+  private worker: Worker<AutomationJobData> | null = null;
 
   constructor(redisUrl: string) {
-    this.automationQueue = new Queue('automationQueue', redisUrl);
+    // Extract Redis connection options from the URL
+    const url = new URL(redisUrl);
+    const connection = {
+      host: url.hostname,
+      port: parseInt(url.port, 10) || 6379,
+      password: url.password || undefined,
+    };
+
+    this.automationQueue = new Queue<AutomationJobData>('automationQueue', { connection });
   }
 
   async addAutomationTask(task: AutomationTask): Promise<Job<AutomationJobData>> {
-    return this.automationQueue.add({ task });
+    return this.automationQueue.add('automation-job', { task });
   }
 
-  getQueue(): Queue.Queue<AutomationJobData> {
+  getQueue(): Queue<AutomationJobData> {
     return this.automationQueue;
   }
 
   async close(): Promise<void> {
+    if (this.worker) {
+      await this.worker.close();
+    }
     await this.automationQueue.close();
   }
 }

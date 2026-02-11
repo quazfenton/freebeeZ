@@ -156,5 +156,4 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     )
   }
-}# Look for middleware files and auth-related configurations
-fd -a 'middleware\.ts$' -o -a 'middleware\.js$'
+}
