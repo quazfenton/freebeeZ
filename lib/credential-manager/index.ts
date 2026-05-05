@@ -24,7 +24,10 @@ export class LocalCredentialManager implements CredentialManager {
 
   constructor(encryptionKey?: string) {
     // In a real implementation, this would be a secure environment variable
-    const key = encryptionKey || process.env.ENCRYPTION_KEY || "default-encryption-key-change-in-production"
+    const key = encryptionKey || process.env.ENCRYPTION_KEY
+    if (!key) {
+      throw new Error('ENCRYPTION_KEY environment variable is required for credential encryption')
+    }
     this.encryptionKey = crypto.createHash("sha256").update(String(key)).digest()
   }
 

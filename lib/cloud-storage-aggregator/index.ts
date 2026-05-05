@@ -1,12 +1,12 @@
-import { StorageProvider, FileMetadata } from './types';
+import { StorageProvider } from './types';
 import { DropboxProvider } from './providers/dropbox';
 import { GoogleDriveProvider } from './providers/google-drive';
 import { MEGAProvider } from './providers/mega';
 import { CloudFileManager } from './cloud-file-manager';
 
+export type { FileMetadata, StorageQuota as StorageQuotaType, UploadResult, SearchOptions } from './types';
 export { 
   StorageProvider, 
-  FileMetadata, 
   CloudFileManager,
   DropboxProvider,
   GoogleDriveProvider,
